@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   useWebgazer,
-  useCalibration,
   useGazeTracking,
+  useCalibration,
 } from "@webgazer-ts/react";
 
 import FlightSimulator from "../FlightSimulator";
@@ -28,13 +28,6 @@ const GRID_COLS = 40;
 const GRID_ROWS = 24;
 const BATCH_INTERVAL_MS = 800;
 const MAX_BUFFER_SIZE = 40;
-const MIN_BATCH_SIZE = 5;
-
-const EDGE_MARGIN = 16;
-const MAX_JUMP_PX = 220;
-const MIN_SAMPLE_INTERVAL_MS = 60;
-const EWMA_ALPHA = 0.22;
-const AOI_CONFIRM_SAMPLES = 3;
 
 function formatZulu(date = new Date()) {
   return date.toUTCString().slice(17, 25);
@@ -426,15 +419,6 @@ export default function FlightSimulatorTracked() {
   const sessionIdRef = useRef(`flight_${Date.now()}`);
   const filterXRef = useRef(new KalmanFilter());
   const filterYRef = useRef(new KalmanFilter());
-  const lastAcceptedRef = useRef(null);
-  const smoothedRef = useRef(null);
-  const lastSampleTsRef = useRef(0);
-  const aoiStabilityRef = useRef({
-    candidate: "NONE",
-    count: 0,
-    active: "NONE",
-  });
-  const ignoreUntilRef = useRef(0);
 
   const [bounds, setBounds] = useState(null);
   const [isTracking, setIsTracking] = useState(false);
@@ -452,6 +436,7 @@ export default function FlightSimulatorTracked() {
   const webgazer = useWebgazer();
   const calibration = useCalibration();
   const gaze = useGazeTracking();
+
   const isReady = !!webgazer;
 
   async function startBackendSession(currentBounds) {
@@ -478,90 +463,6 @@ export default function FlightSimulatorTracked() {
     sessionIdRef.current = data.sessionId;
     sessionStartRef.current = Date.now();
   }
-
-  async function flushSamplesNow(samples) {
-    if (!samples?.length || !backendSessionIdRef.current) return;
-
-    const payload = {
-      sessionId: backendSessionIdRef.current,
-      samples,
-    };
-
-    const r = await fetch("http://localhost:4000/api/gaze/batch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!r.ok) {
-      const text = await r.text();
-      throw new Error(`Batch POST failed: ${r.status} ${text}`);
-    }
-
-    const data = await r.json();
-    setLastBatch(data);
-  }
-
-  function smoothPoint(point) {
-    const prev = smoothedRef.current;
-    if (!prev) {
-      smoothedRef.current = point;
-      return point;
-    }
-
-    const next = {
-      x: prev.x + EWMA_ALPHA * (point.x - prev.x),
-      y: prev.y + EWMA_ALPHA * (point.y - prev.y),
-    };
-    smoothedRef.current = next;
-    return next;
-  }
-
-  function shouldAcceptPoint(point, rect) {
-    if (
-      point.x < EDGE_MARGIN ||
-      point.y < EDGE_MARGIN ||
-      point.x > rect.width - EDGE_MARGIN ||
-      point.y > rect.height - EDGE_MARGIN
-    ) {
-      return false;
-    }
-
-    const last = lastAcceptedRef.current;
-    if (last) {
-      const dx = point.x - last.x;
-      const dy = point.y - last.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist > MAX_JUMP_PX) return false;
-    }
-
-    return true;
-  }
-
-  function stableAOI(nextAoi) {
-    const state = aoiStabilityRef.current;
-
-    if (nextAoi === state.active) {
-      state.candidate = nextAoi;
-      state.count = 0;
-      return state.active;
-    }
-
-    if (nextAoi === state.candidate) {
-      state.count += 1;
-    } else {
-      state.candidate = nextAoi;
-      state.count = 1;
-    }
-
-    if (state.count >= AOI_CONFIRM_SAMPLES) {
-      state.active = nextAoi;
-      state.count = 0;
-    }
-
-    return state.active;
-  }
-
   useEffect(() => {
     const measure = () => {
       if (!rootRef.current) return;
@@ -579,56 +480,46 @@ export default function FlightSimulatorTracked() {
     return () => window.removeEventListener("resize", measure);
   }, []);
 
-  useEffect(() => {
-    const handlePointerDown = () => {
-      ignoreUntilRef.current = Date.now() + 700;
-    };
-
-    window.addEventListener("pointerdown", handlePointerDown);
-    return () => window.removeEventListener("pointerdown", handlePointerDown);
-  }, []);
-
   const resolvedAOIs = useMemo(() => {
     if (!bounds) return [];
     return resolveAOIRects(DEFAULT_AOIS, bounds);
   }, [bounds]);
 
   useEffect(() => {
-    if (!isTracking || !bounds || !gaze || !rootRef.current) return;
+    if (!isTracking || !bounds || gaze == null) return;
 
     const gazeX = gaze.x ?? gaze.screenX ?? gaze.clientX;
     const gazeY = gaze.y ?? gaze.screenY ?? gaze.clientY;
 
     if (typeof gazeX !== "number" || typeof gazeY !== "number") return;
 
-    const now = Date.now();
-    if (now < ignoreUntilRef.current) return;
-    if (now - lastSampleTsRef.current < MIN_SAMPLE_INTERVAL_MS) return;
-    lastSampleTsRef.current = now;
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (!rect) return;
 
-    const rect = rootRef.current.getBoundingClientRect();
     const local = viewportToLocal(gazeX, gazeY, rect);
-
     if (!isInsideRect(local.x, local.y, rect)) return;
 
-    const kalmanPoint = {
-      x: Math.max(0, Math.min(rect.width, filterXRef.current.filter(local.x))),
-      y: Math.max(0, Math.min(rect.height, filterYRef.current.filter(local.y))),
+    const smoothX = filterXRef.current.filter(local.x);
+    const smoothY = filterYRef.current.filter(local.y);
+
+    const clampedPoint = {
+      x: Math.max(0, Math.min(rect.width, smoothX)),
+      y: Math.max(0, Math.min(rect.height, smoothY)),
     };
 
-    const filteredPoint = smoothPoint(kalmanPoint);
+    const edgeMargin = 24;
+    if (
+      clampedPoint.x < edgeMargin ||
+      clampedPoint.y < edgeMargin ||
+      clampedPoint.x > rect.width - edgeMargin ||
+      clampedPoint.y > rect.height - edgeMargin
+    ) {
+      return;
+    }
 
-    if (!shouldAcceptPoint(filteredPoint, rect)) return;
+    setGazePoint(clampedPoint);
 
-    lastAcceptedRef.current = filteredPoint;
-    setGazePoint(filteredPoint);
-
-    const rawAoi = mapPointToAOI(
-      filteredPoint.x,
-      filteredPoint.y,
-      resolvedAOIs
-    );
-    const aoiId = stableAOI(rawAoi);
+    const aoiId = mapPointToAOI(clampedPoint.x, clampedPoint.y, resolvedAOIs);
     setCurrentAOI(aoiId);
 
     setAoiCounts((prev) => ({
@@ -637,12 +528,12 @@ export default function FlightSimulatorTracked() {
     }));
 
     const { gx, gy } = pointToGridCell(
-      filteredPoint.x,
-      filteredPoint.y,
+      clampedPoint.x,
+      clampedPoint.y,
       rect.width,
       rect.height,
       GRID_COLS,
-      GRID_ROWS
+      GRID_ROWS,
     );
 
     const key = `${gx}:${gy}`;
@@ -656,24 +547,23 @@ export default function FlightSimulatorTracked() {
       },
     }));
 
-    const { nx, ny } = normalizePoint(filteredPoint.x, filteredPoint.y, rect);
+    const { nx, ny } = normalizePoint(clampedPoint.x, clampedPoint.y, rect);
 
     const sample = {
       sessionId: backendSessionIdRef.current || sessionIdRef.current,
-      tsMs: now,
-      elapsedMs: now - sessionStartRef.current,
-      x: Number(filteredPoint.x.toFixed(2)),
-      y: Number(filteredPoint.y.toFixed(2)),
+      tsMs: Date.now(),
+      elapsedMs: Date.now() - sessionStartRef.current,
+      x: Number(clampedPoint.x.toFixed(2)),
+      y: Number(clampedPoint.y.toFixed(2)),
       nx: Number(nx.toFixed(4)),
       ny: Number(ny.toFixed(4)),
       aoi: aoiId,
-      confidence: typeof gaze.confidence === "number" ? gaze.confidence : 1,
+      confidence: 1,
       gridX: gx,
       gridY: gy,
       isValid: 1,
       invalidReason: null,
     };
-
     setSampleBuffer((prev) => {
       const next = [...prev, sample];
       return next.length > MAX_BUFFER_SIZE
@@ -687,7 +577,7 @@ export default function FlightSimulatorTracked() {
 
     const interval = setInterval(() => {
       setSampleBuffer((prev) => {
-        if (prev.length < MIN_BATCH_SIZE) return prev;
+        if (!prev.length) return prev;
         if (!backendSessionIdRef.current) return prev;
 
         const payload = {
@@ -720,16 +610,11 @@ export default function FlightSimulatorTracked() {
 
     return () => clearInterval(interval);
   }, [isTracking]);
-
   const heatmapCells = useMemo(() => Object.values(heatmapMap), [heatmapMap]);
 
   const handleStartTracking = async () => {
     filterXRef.current.reset();
     filterYRef.current.reset();
-    smoothedRef.current = null;
-    lastAcceptedRef.current = null;
-    lastSampleTsRef.current = 0;
-    aoiStabilityRef.current = { candidate: "NONE", count: 0, active: "NONE" };
 
     try {
       if (!bounds) {
@@ -740,18 +625,7 @@ export default function FlightSimulatorTracked() {
         await startBackendSession(bounds);
       }
 
-      if (webgazer?.start) {
-        await webgazer.start();
-      } else if (webgazer?.begin) {
-        await webgazer.begin();
-      } else if (webgazer?.resume) {
-        await webgazer.resume();
-      }
-
-      if (webgazer?.showPredictionPoints) {
-        webgazer.showPredictionPoints(false);
-      }
-
+      await webgazer?.start?.();
       setIsTracking(true);
     } catch (err) {
       console.error("Failed to start tracking:", err);
@@ -761,20 +635,12 @@ export default function FlightSimulatorTracked() {
 
   const handleStopTracking = async () => {
     try {
-      if (webgazer?.pause) {
-        await webgazer.pause();
-      }
-
-      const remaining = sampleBuffer;
-      if (remaining.length) {
-        await flushSamplesNow(remaining);
-        setSampleBuffer([]);
-      }
+      await webgazer?.stop?.();
 
       if (backendSessionIdRef.current) {
         await fetch(
           `http://localhost:4000/api/sessions/${backendSessionIdRef.current}/end`,
-          { method: "POST" }
+          { method: "POST" },
         );
       }
     } catch (err) {
@@ -787,40 +653,23 @@ export default function FlightSimulatorTracked() {
 
   const handleResetSession = () => {
     sessionIdRef.current = `flight_${Date.now()}`;
-    backendSessionIdRef.current = null;
-    sessionStartRef.current = Date.now();
-
     setHeatmapMap({});
     setSampleBuffer([]);
     setLastBatch(null);
     setGazePoint(null);
     setCurrentAOI("NONE");
     setAoiCounts({});
-
     filterXRef.current.reset();
     filterYRef.current.reset();
-    smoothedRef.current = null;
-    lastAcceptedRef.current = null;
-    lastSampleTsRef.current = 0;
-    aoiStabilityRef.current = { candidate: "NONE", count: 0, active: "NONE" };
   };
 
   const handleRecalibrate = async () => {
     try {
       await calibration?.reset?.();
-      if (window.webgazer?.clearData) {
-        window.webgazer.clearData();
-      }
-      window.localStorage.removeItem("webgazerGlobalData");
     } finally {
       setIsCalibrated(false);
       setIsTracking(false);
       setGazePoint(null);
-      smoothedRef.current = null;
-      lastAcceptedRef.current = null;
-      lastSampleTsRef.current = 0;
-      ignoreUntilRef.current = Date.now() + 700;
-      aoiStabilityRef.current = { candidate: "NONE", count: 0, active: "NONE" };
     }
   };
 
@@ -883,23 +732,21 @@ export default function FlightSimulatorTracked() {
       {bounds && isReady && !isCalibrated && (
         <CalibrationOverlay
           bounds={bounds}
-          clicksPerPoint={5}
+          quickMode={false}
+          allowSkip={false}
           title="Singapore Airlines Crew Attention Calibration"
-          subtitle="Keep your head still, look at each point, and click it 5 times."
+          subtitle="Complete gaze-point calibration before starting the A350-900 attention analytics session."
           onRecordPoint={(x, y) => calibration?.recordPoint?.(x, y)}
           onComplete={async () => {
             try {
               await calibration?.complete?.();
             } catch (err) {
-              console.warn("Calibration completion reported an issue:", err);
+              console.warn(
+                "Calibration complete call failed, continuing in test mode:",
+                err,
+              );
             } finally {
-              ignoreUntilRef.current = Date.now() + 800;
-              setTimeout(() => {
-                lastAcceptedRef.current = null;
-                smoothedRef.current = null;
-                lastSampleTsRef.current = 0;
-                setIsCalibrated(true);
-              }, 800);
+              setIsCalibrated(true);
             }
           }}
         />

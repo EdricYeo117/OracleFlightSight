@@ -21,20 +21,21 @@ class WebGazerSingleton {
       .setRegression("weightedRidge")
       .setTracker("TFFacemesh")
       .saveDataAcrossSessions(true)
-      .showFaceOverlay(false)
-      .showFaceFeedbackBox(false)
+      .showFaceOverlay(true)
+      .showFaceFeedbackBox(true)
       .showPredictionPoints(false)
       .begin();
 
-    this.initialized = true;
-    this.active = true;
     wg.setGazeListener(this.boundListener);
 
+    this.initialized = true;
+    this.active = true;
     return wg;
   }
 
   handleGaze(data, elapsedTime) {
     if (!this.active || !data) return;
+    if (typeof data.x !== "number" || typeof data.y !== "number") return;
 
     const point = {
       x: data.x,

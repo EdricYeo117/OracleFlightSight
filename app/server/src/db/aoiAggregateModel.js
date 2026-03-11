@@ -72,42 +72,8 @@ export async function upsertAoiAggregates(sessionId, aggregates) {
       lookVerifiedCount: a.lookVerifiedCount ?? 0,
     }));
 
-    const result = await conn.executeMany(sql, binds, {
-      autoCommit: true,
-    });
-
+    const result = await conn.executeMany(sql, binds, { autoCommit: true });
     return result.rowsAffected || 0;
-  } finally {
-    await conn.close();
-  }
-}
-
-export async function getAoiAggregatesBySession(sessionId) {
-  const conn = await getConnection();
-  try {
-    const result = await conn.execute(
-      `
-      SELECT
-        SESSION_ID,
-        AOI,
-        SAMPLE_COUNT,
-        FIXATION_COUNT,
-        TOTAL_DWELL_MS,
-        AVG_FIXATION_MS,
-        LONGEST_FIXATION_MS,
-        FIRST_LOOK_TS_MS,
-        LAST_LOOK_TS_MS,
-        LOOK_VERIFIED_COUNT,
-        LAST_UPDATED
-      FROM AOI_AGGREGATE
-      WHERE SESSION_ID = :sessionId
-      ORDER BY TOTAL_DWELL_MS DESC, FIXATION_COUNT DESC
-      `,
-      { sessionId },
-      { outFormat: 4002 }
-    );
-
-    return result.rows;
   } finally {
     await conn.close();
   }

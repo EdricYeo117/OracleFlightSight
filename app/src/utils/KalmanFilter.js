@@ -1,7 +1,7 @@
 export default class KalmanFilter {
   constructor({
-    R = 0.01, // measurement noise
-    Q = 3,    // process noise
+    R = 0.35,
+    Q = 0.7,
     A = 1,
     B = 0,
     C = 1,
@@ -24,8 +24,7 @@ export default class KalmanFilter {
       const predX = this.predict(u);
       const predCov = this.uncertainty();
 
-      const K =
-        predCov * this.C * (1 / (this.C * predCov * this.C + this.Q));
+      const K = (predCov * this.C) / (this.C * predCov * this.C + this.Q);
 
       this.x = predX + K * (z - this.C * predX);
       this.cov = predCov - K * this.C * predCov;

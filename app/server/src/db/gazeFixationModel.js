@@ -39,22 +39,36 @@ export async function insertGazeFixations(fixations) {
       )
     `;
 
-    const binds = fixations.map((f) => ({
-      sessionId: f.sessionId,
-      aoi: f.aoi ?? null,
-      startTsMs: f.startTsMs,
-      endTsMs: f.endTsMs,
-      durationMs: f.durationMs,
-      centerX: f.centerX ?? null,
-      centerY: f.centerY ?? null,
-      centerNx: f.centerNx ?? null,
-      centerNy: f.centerNy ?? null,
-      gridX: f.gridX ?? null,
-      gridY: f.gridY ?? null,
-      sampleCount: f.sampleCount ?? 0,
-      isVerifiedLook: f.isVerifiedLook ?? 0,
-      verifyRuleId: f.verifyRuleId ?? null,
-    }));
+const binds = fixations
+  .filter((f) =>
+    f &&
+    Number.isFinite(f.startTsMs) &&
+    Number.isFinite(f.endTsMs) &&
+    Number.isFinite(f.durationMs) &&
+    f.endTsMs >= f.startTsMs &&
+    f.durationMs > 0 &&
+    f.sampleCount >= 2
+  )
+  .map((f) => ({
+    sessionId: f.sessionId,
+    aoi: f.aoi ?? null,
+    startTsMs: f.startTsMs,
+    endTsMs: f.endTsMs,
+    durationMs: f.durationMs,
+    centerX: f.centerX ?? null,
+    centerY: f.centerY ?? null,
+    centerNx: f.centerNx ?? null,
+    centerNy: f.centerNy ?? null,
+    gridX: f.gridX ?? null,
+    gridY: f.gridY ?? null,
+    sampleCount: f.sampleCount ?? 0,
+    isVerifiedLook: f.isVerifiedLook ?? 0,
+    verifyRuleId: f.verifyRuleId ?? null,
+  }));
+
+if (!binds.length) return 0;
+
+    
 
     const result = await conn.executeMany(sql, binds, {
       autoCommit: true,

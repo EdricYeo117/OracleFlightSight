@@ -1,6 +1,15 @@
 import app from "./app.js";
-import { env } from "./config/env.js";
+import { initDb } from "./config/db.js";
 
-app.listen(env.PORT, () => {
-  console.log(`OracleFlightSight backend running on http://localhost:${env.PORT}`);
-});
+const PORT = process.env.PORT || 4000;
+
+initDb()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("Failed to initialize DB:", err);
+    process.exit(1);
+  });

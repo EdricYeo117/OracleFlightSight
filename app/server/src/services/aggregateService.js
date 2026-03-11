@@ -53,7 +53,14 @@ export function closeCurrentFixation(session) {
   const fixation = session.currentFixation;
   if (!fixation) return null;
 
-  const durationMs = Math.max(0, fixation.endTsMs - fixation.startTsMs);
+  const durationMs = fixation.endTsMs - fixation.startTsMs;
+
+  // Skip invalid / too-short fixations
+  if (fixation.sampleCount < 2 || durationMs <= 0) {
+    session.currentFixation = null;
+    return null;
+  }
+
   const centerX = average(fixation.xs);
   const centerY = average(fixation.ys);
   const centerNx = average(fixation.nxs);
@@ -73,7 +80,7 @@ export function closeCurrentFixation(session) {
     gridY: fixation.gridY,
     sampleCount: fixation.sampleCount,
     isVerifiedLook: 0,
-    verifyRuleId: null
+    verifyRuleId: null,
   };
 
   session.totalFixations += 1;

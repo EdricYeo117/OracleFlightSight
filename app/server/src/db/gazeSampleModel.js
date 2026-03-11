@@ -47,16 +47,13 @@ export async function insertGazeSamples(samples) {
       ny: s.ny ?? null,
       aoi: s.aoi ?? null,
       confidence: s.confidence ?? null,
-      gridX: s.gridX ?? null,
-      gridY: s.gridY ?? null,
+      gridX: s.gridX ?? s.grid?.x ?? null,
+      gridY: s.gridY ?? s.grid?.y ?? null,
       isValid: s.isValid ?? 1,
       invalidReason: s.invalidReason ?? null,
     }));
 
-    const result = await conn.executeMany(sql, binds, {
-      autoCommit: true,
-    });
-
+    const result = await conn.executeMany(sql, binds, { autoCommit: true });
     return result.rowsAffected || 0;
   } finally {
     await conn.close();

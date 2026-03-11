@@ -1,20 +1,31 @@
 import oracledb from "oracledb";
-import { env } from "./env.js";
+import path from "path";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 let pool;
 
 export async function initDb() {
   if (pool) return pool;
 
+  const walletDir = process.env.ORACLE_WALLET_DIR;
+
   pool = await oracledb.createPool({
-    user: env.ORACLE_USER,
-    password: env.ORACLE_PASSWORD,
-    connectString: env.ORACLE_CONNECT_STRING,
+    user: process.env.ORACLE_USER,
+    password: process.env.ORACLE_PASSWORD,
+    connectString: process.env.ORACLE_CONNECT_STRING,
+
+    configDir: walletDir,
+    walletLocation: walletDir,
+    walletPassword: process.env.ORACLE_WALLET_PASSWORD,
+
     poolMin: 1,
     poolMax: 10,
     poolIncrement: 1,
   });
 
+  console.log("Oracle pool created with wallet");
   return pool;
 }
 

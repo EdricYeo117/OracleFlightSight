@@ -16,38 +16,22 @@ export default function CalibrationOverlay({
   bounds,
   clicksPerPoint = 5,
   title = "Eye Tracking Calibration",
-  subtitle = "Click each glowing point while looking directly at it.",
+  subtitle = "Keep your head still, look directly at each point, and click it 5 times.",
   onRecordPoint,
   onComplete,
-  quickMode = false,
-  allowSkip = true,
 }) {
-  const effectiveClicksPerPoint = quickMode ? 1 : clicksPerPoint;
-
   const [counts, setCounts] = useState({});
   const [isFinishing, setIsFinishing] = useState(false);
 
   const completedCount = useMemo(() => {
-    return POINTS.filter(
-      (point) => (counts[point.id] || 0) >= effectiveClicksPerPoint
-    ).length;
-  }, [counts, effectiveClicksPerPoint]);
-
-  const finishCalibration = async () => {
-    try {
-      setIsFinishing(true);
-      await onComplete?.();
-    } catch (err) {
-      console.error("Calibration completion failed:", err);
-      setIsFinishing(false);
-    }
-  };
+    return POINTS.filter((point) => (counts[point.id] || 0) >= clicksPerPoint).length;
+  }, [counts, clicksPerPoint]);
 
   const handleClick = async (point) => {
     if (!bounds || isFinishing) return;
 
     const current = counts[point.id] || 0;
-    if (current >= effectiveClicksPerPoint) return;
+    if (current >= clicksPerPoint) return;
 
     const next = current + 1;
     const nextCounts = { ...counts, [point.id]: next };
@@ -64,40 +48,17 @@ export default function CalibrationOverlay({
     }
 
     const allDone =
-      POINTS.filter((p) => (nextCounts[p.id] || 0) >= effectiveClicksPerPoint)
-        .length === POINTS.length;
+      POINTS.filter((p) => (nextCounts[p.id] || 0) >= clicksPerPoint).length === POINTS.length;
 
     if (allDone) {
-      await finishCalibration();
-    }
-  };
-
-  const handleInstantComplete = async () => {
-    if (!bounds || isFinishing) return;
-
-    const allCounts = {};
-    for (const point of POINTS) {
-      allCounts[point.id] = effectiveClicksPerPoint;
-    }
-    setCounts(allCounts);
-
-    if (quickMode && onRecordPoint) {
-      for (const point of POINTS) {
-        const x = bounds.width * point.xPct;
-        const y = bounds.height * point.yPct;
-        try {
-          await onRecordPoint(x, y, point);
-        } catch (err) {
-          console.error("Quick calibration point record failed:", err);
-        }
+      try {
+        setIsFinishing(true);
+        await onComplete?.();
+      } catch (err) {
+        console.error("Calibration completion failed:", err);
+        setIsFinishing(false);
       }
     }
-
-    await finishCalibration();
-  };
-
-  const handleSkip = async () => {
-    await finishCalibration();
   };
 
   return (
@@ -106,7 +67,7 @@ export default function CalibrationOverlay({
         position: "absolute",
         inset: 0,
         zIndex: 50,
-        background: "rgba(0,0,0,0.72)",
+        background: "rgba(0,0,0,0.78)",
         backdropFilter: "blur(4px)",
       }}
     >
@@ -118,7 +79,7 @@ export default function CalibrationOverlay({
           transform: "translateX(-50%)",
           padding: "12px 18px",
           borderRadius: 12,
-          background: "rgba(10,15,28,0.92)",
+          background: "rgba(10,15,28,0.94)",
           color: "#fff",
           border: "1px solid rgba(74,170,255,0.4)",
           fontFamily: "sans-serif",
@@ -130,13 +91,15 @@ export default function CalibrationOverlay({
           {title}
         </div>
 
-        <div style={{ fontSize: 14, opacity: 0.9 }}>
-          {quickMode
-            ? "Quick test mode is enabled. One click per point or use instant complete."
-            : subtitle}
+        <div style={{ fontSize: 14, opacity: 0.92 }}>
+          {subtitle}
         </div>
 
-        <div style={{ fontSize: 13, color: "#4af", marginTop: 6 }}>
+        <div style={{ fontSize: 12, opacity: 0.8, marginTop: 6 }}>
+          Sit at your normal simulator distance. Keep your face centered and avoid moving after calibration.
+        </div>
+
+        <div style={{ fontSize: 13, color: "#4af", marginTop: 8 }}>
           Completed: {completedCount} / {POINTS.length}
         </div>
 
@@ -145,56 +108,12 @@ export default function CalibrationOverlay({
             Finalizing calibration...
           </div>
         )}
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            gap: 10,
-            marginTop: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <button
-            onClick={handleInstantComplete}
-            disabled={isFinishing}
-            style={{
-              padding: "8px 12px",
-              borderRadius: 10,
-              border: "1px solid rgba(0,255,100,0.45)",
-              background: "rgba(0,255,100,0.12)",
-              color: "#9cffb8",
-              cursor: isFinishing ? "default" : "pointer",
-              fontWeight: 600,
-            }}
-          >
-            One-Tap Complete
-          </button>
-
-          {allowSkip && (
-            <button
-              onClick={handleSkip}
-              disabled={isFinishing}
-              style={{
-                padding: "8px 12px",
-                borderRadius: 10,
-                border: "1px solid rgba(255,184,77,0.45)",
-                background: "rgba(255,184,77,0.12)",
-                color: "#ffcf88",
-                cursor: isFinishing ? "default" : "pointer",
-                fontWeight: 600,
-              }}
-            >
-              Skip Calibration
-            </button>
-          )}
-        </div>
       </div>
 
       {POINTS.map((point) => {
         const current = counts[point.id] || 0;
-        const done = current >= effectiveClicksPerPoint;
-        const progress = Math.min(current / effectiveClicksPerPoint, 1);
+        const done = current >= clicksPerPoint;
+        const progress = Math.min(current / clicksPerPoint, 1);
 
         return (
           <button
@@ -206,16 +125,16 @@ export default function CalibrationOverlay({
               left: `${point.xPct * 100}%`,
               top: `${point.yPct * 100}%`,
               transform: "translate(-50%, -50%)",
-              width: done ? 26 : 36,
-              height: done ? 26 : 36,
+              width: done ? 26 : 38,
+              height: done ? 26 : 38,
               borderRadius: "50%",
-              border: done ? "2px solid #4f4" : "2px solid #4af",
+              border: done ? "2px solid #4f4" : "2px solid #ffd84d",
               background: done
-                ? "rgba(0,255,100,0.25)"
-                : `rgba(74,170,255,${0.2 + progress * 0.5})`,
+                ? "rgba(0,255,100,0.22)"
+                : `rgba(255,216,77,${0.25 + progress * 0.45})`,
               boxShadow: done
                 ? "0 0 18px rgba(0,255,100,0.6)"
-                : "0 0 24px rgba(74,170,255,0.9)",
+                : "0 0 28px rgba(255,216,77,0.9)",
               cursor: done || isFinishing ? "default" : "pointer",
             }}
             title={`Calibration point ${point.id}`}
@@ -227,7 +146,7 @@ export default function CalibrationOverlay({
                 fontWeight: 700,
               }}
             >
-              {done ? "✓" : `${current}/${effectiveClicksPerPoint}`}
+              {done ? "✓" : `${current}/${clicksPerPoint}`}
             </span>
           </button>
         );
