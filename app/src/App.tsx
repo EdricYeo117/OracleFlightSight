@@ -1,5 +1,5 @@
-import FlightSimulator from "./components/FlightSimulator";
+import FlightSimulatorTracked from "./components/FlightAnalytics/FlightSimulatorTracked";
 
 export default function App() {
-  return <FlightSimulator />;
+  return <FlightSimulatorTracked />;
 }

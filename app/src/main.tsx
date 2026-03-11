@@ -1,12 +1,12 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { WebgazerProvider } from "@webgazer-ts/react";
 import App from "./App";
 
-const rootElement = document.getElementById("root");
-if (rootElement) {
-  ReactDOM.createRoot(rootElement).render(
-    <React.StrictMode>
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <WebgazerProvider>
       <App />
-    </React.StrictMode>
-  );
-}
+    </WebgazerProvider>
+  </React.StrictMode>
+);

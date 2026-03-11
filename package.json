@@ -9,6 +9,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@webgazer-ts/core": "^0.2.0",
+    "@webgazer-ts/react": "^0.2.0",
+    "js-cookie": "^3.0.5",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },

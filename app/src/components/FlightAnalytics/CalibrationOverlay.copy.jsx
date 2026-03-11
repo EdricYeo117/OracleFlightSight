@@ -19,35 +19,21 @@ export default function CalibrationOverlay({
   subtitle = "Click each glowing point while looking directly at it.",
   onRecordPoint,
   onComplete,
-  quickMode = false,
-  allowSkip = true,
 }) {
-  const effectiveClicksPerPoint = quickMode ? 1 : clicksPerPoint;
-
   const [counts, setCounts] = useState({});
   const [isFinishing, setIsFinishing] = useState(false);
 
   const completedCount = useMemo(() => {
     return POINTS.filter(
-      (point) => (counts[point.id] || 0) >= effectiveClicksPerPoint
+      (point) => (counts[point.id] || 0) >= clicksPerPoint
     ).length;
-  }, [counts, effectiveClicksPerPoint]);
-
-  const finishCalibration = async () => {
-    try {
-      setIsFinishing(true);
-      await onComplete?.();
-    } catch (err) {
-      console.error("Calibration completion failed:", err);
-      setIsFinishing(false);
-    }
-  };
+  }, [counts, clicksPerPoint]);
 
   const handleClick = async (point) => {
     if (!bounds || isFinishing) return;
 
     const current = counts[point.id] || 0;
-    if (current >= effectiveClicksPerPoint) return;
+    if (current >= clicksPerPoint) return;
 
     const next = current + 1;
     const nextCounts = { ...counts, [point.id]: next };
@@ -64,40 +50,18 @@ export default function CalibrationOverlay({
     }
 
     const allDone =
-      POINTS.filter((p) => (nextCounts[p.id] || 0) >= effectiveClicksPerPoint)
-        .length === POINTS.length;
+      POINTS.filter((p) => (nextCounts[p.id] || 0) >= clicksPerPoint).length ===
+      POINTS.length;
 
     if (allDone) {
-      await finishCalibration();
-    }
-  };
-
-  const handleInstantComplete = async () => {
-    if (!bounds || isFinishing) return;
-
-    const allCounts = {};
-    for (const point of POINTS) {
-      allCounts[point.id] = effectiveClicksPerPoint;
-    }
-    setCounts(allCounts);
-
-    if (quickMode && onRecordPoint) {
-      for (const point of POINTS) {
-        const x = bounds.width * point.xPct;
-        const y = bounds.height * point.yPct;
-        try {
-          await onRecordPoint(x, y, point);
-        } catch (err) {
-          console.error("Quick calibration point record failed:", err);
-        }
+      try {
+        setIsFinishing(true);
+        await onComplete?.();
+      } catch (err) {
+        console.error("Calibration completion failed:", err);
+        setIsFinishing(false);
       }
     }
-
-    await finishCalibration();
-  };
-
-  const handleSkip = async () => {
-    await finishCalibration();
   };
 
   return (
@@ -116,14 +80,14 @@ export default function CalibrationOverlay({
           top: 16,
           left: "50%",
           transform: "translateX(-50%)",
-          padding: "12px 18px",
+          padding: "10px 16px",
           borderRadius: 12,
           background: "rgba(10,15,28,0.92)",
           color: "#fff",
           border: "1px solid rgba(74,170,255,0.4)",
           fontFamily: "sans-serif",
           textAlign: "center",
-          minWidth: 360,
+          minWidth: 320,
         }}
       >
         <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>
@@ -131,9 +95,7 @@ export default function CalibrationOverlay({
         </div>
 
         <div style={{ fontSize: 14, opacity: 0.9 }}>
-          {quickMode
-            ? "Quick test mode is enabled. One click per point or use instant complete."
-            : subtitle}
+          {subtitle}
         </div>
 
         <div style={{ fontSize: 13, color: "#4af", marginTop: 6 }}>
@@ -145,56 +107,12 @@ export default function CalibrationOverlay({
             Finalizing calibration...
           </div>
         )}
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            gap: 10,
-            marginTop: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <button
-            onClick={handleInstantComplete}
-            disabled={isFinishing}
-            style={{
-              padding: "8px 12px",
-              borderRadius: 10,
-              border: "1px solid rgba(0,255,100,0.45)",
-              background: "rgba(0,255,100,0.12)",
-              color: "#9cffb8",
-              cursor: isFinishing ? "default" : "pointer",
-              fontWeight: 600,
-            }}
-          >
-            One-Tap Complete
-          </button>
-
-          {allowSkip && (
-            <button
-              onClick={handleSkip}
-              disabled={isFinishing}
-              style={{
-                padding: "8px 12px",
-                borderRadius: 10,
-                border: "1px solid rgba(255,184,77,0.45)",
-                background: "rgba(255,184,77,0.12)",
-                color: "#ffcf88",
-                cursor: isFinishing ? "default" : "pointer",
-                fontWeight: 600,
-              }}
-            >
-              Skip Calibration
-            </button>
-          )}
-        </div>
       </div>
 
       {POINTS.map((point) => {
         const current = counts[point.id] || 0;
-        const done = current >= effectiveClicksPerPoint;
-        const progress = Math.min(current / effectiveClicksPerPoint, 1);
+        const done = current >= clicksPerPoint;
+        const progress = Math.min(current / clicksPerPoint, 1);
 
         return (
           <button
@@ -227,7 +145,7 @@ export default function CalibrationOverlay({
                 fontWeight: 700,
               }}
             >
-              {done ? "✓" : `${current}/${effectiveClicksPerPoint}`}
+              {done ? "✓" : `${current}/${clicksPerPoint}`}
             </span>
           </button>
         );

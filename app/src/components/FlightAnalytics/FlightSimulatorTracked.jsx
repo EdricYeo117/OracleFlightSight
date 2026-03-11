@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useWebgazer,
+  useGazeTracking,
+  useCalibration,
+} from "@webgazer-ts/react";
+
 import FlightSimulator from "../FlightSimulator";
-import WebGazerSingleton from "../../utils/WebGazerSingleton";
 import KalmanFilter from "../../utils/KalmanFilter";
 import {
   viewportToLocal,
@@ -24,14 +29,379 @@ const GRID_ROWS = 24;
 const BATCH_INTERVAL_MS = 800;
 const MAX_BUFFER_SIZE = 40;
 
+function formatZulu(date = new Date()) {
+  return date.toUTCString().slice(17, 25);
+}
+
+function BrandHeader({ isReady, isCalibrated, isTracking, currentAOI }) {
+  const [zulu, setZulu] = useState(formatZulu());
+
+  useEffect(() => {
+    const timer = setInterval(() => setZulu(formatZulu()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const trackingState = !isReady
+    ? "EYE TRACKING OFFLINE"
+    : !isCalibrated
+      ? "CALIBRATION REQUIRED"
+      : isTracking
+        ? "ATTENTION TRACKING ACTIVE"
+        : "TRACKING STANDBY";
+
+  const trackingColor = !isReady
+    ? "#ff6b7a"
+    : !isCalibrated
+      ? "#ffb84d"
+      : isTracking
+        ? "#7cffb2"
+        : "#7fd6ff";
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 14,
+        left: 14,
+        right: 14,
+        zIndex: 40,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+        padding: "10px 14px",
+        border: "1px solid rgba(200,164,77,0.28)",
+        borderRadius: 14,
+        background:
+          "linear-gradient(90deg, rgba(6,23,43,0.94), rgba(10,33,66,0.94), rgba(6,23,43,0.94))",
+        boxShadow: "0 10px 26px rgba(0,0,0,0.28)",
+        backdropFilter: "blur(10px)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: "50%",
+            background:
+              "linear-gradient(180deg, rgba(200,164,77,1), rgba(138,108,76,1))",
+            color: "#04101b",
+            display: "grid",
+            placeItems: "center",
+            fontFamily: "Orbitron, monospace",
+            fontWeight: 900,
+            fontSize: 11,
+            letterSpacing: 1,
+          }}
+        >
+          SIA
+        </div>
+
+        <div>
+          <div
+            style={{
+              fontFamily: "Orbitron, monospace",
+              fontSize: 13,
+              letterSpacing: 2.6,
+              color: "#f2e3b0",
+            }}
+          >
+            Singapore Airlines
+          </div>
+          <div
+            style={{
+              fontSize: 11,
+              letterSpacing: 2,
+              color: "rgba(238,244,251,0.66)",
+            }}
+          >
+            AIRBUS A350-900 · FLIGHT CREW ATTENTION ANALYTICS
+          </div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+          justifyContent: "flex-end",
+        }}
+      >
+        <div
+          style={{
+            padding: "6px 10px",
+            borderRadius: 999,
+            border: `1px solid ${trackingColor}`,
+            color: trackingColor,
+            fontFamily: "Orbitron, monospace",
+            fontSize: 10,
+            letterSpacing: 1.8,
+            background: "rgba(255,255,255,0.03)",
+          }}
+        >
+          {trackingState}
+        </div>
+
+        <div
+          style={{
+            padding: "6px 10px",
+            borderRadius: 999,
+            border: "1px solid rgba(127,214,255,0.34)",
+            color: "#7fd6ff",
+            fontFamily: "Orbitron, monospace",
+            fontSize: 10,
+            letterSpacing: 1.8,
+            background: "rgba(255,255,255,0.03)",
+          }}
+        >
+          ACTIVE AOI · {currentAOI}
+        </div>
+
+        <div style={{ minWidth: 96, textAlign: "right" }}>
+          <div
+            style={{
+              fontFamily: "Orbitron, monospace",
+              fontSize: 18,
+              color: "#c8a44d",
+              letterSpacing: 2,
+            }}
+          >
+            {zulu}
+          </div>
+          <div
+            style={{
+              fontSize: 10,
+              letterSpacing: 2,
+              color: "rgba(238,244,251,0.5)",
+            }}
+          >
+            UTC · ZULU
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ControlDock({
+  isReady,
+  isCalibrated,
+  isTracking,
+  showAOIOverlay,
+  showHeatmap,
+  onStart,
+  onStop,
+  onReset,
+  onRecalibrate,
+  onToggleAOI,
+  onToggleHeatmap,
+}) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: 14,
+        bottom: 14,
+        zIndex: 40,
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 10,
+        maxWidth: "calc(100% - 28px)",
+      }}
+    >
+      <button
+        onClick={onStart}
+        disabled={!isReady || !isCalibrated || isTracking}
+        style={btnStyle("#7cffb2", !isReady || !isCalibrated || isTracking)}
+      >
+        Start Tracking
+      </button>
+      <button
+        onClick={onStop}
+        disabled={!isTracking}
+        style={btnStyle("#ffb84d", !isTracking)}
+      >
+        Stop Tracking
+      </button>
+      <button onClick={onReset} style={btnStyle("#7fd6ff", false)}>
+        Reset Session
+      </button>
+      <button onClick={onRecalibrate} style={btnStyle("#c8a44d", false)}>
+        Recalibrate
+      </button>
+      <button onClick={onToggleAOI} style={btnStyle("#7fd6ff", false)}>
+        {showAOIOverlay ? "Hide AOIs" : "Show AOIs"}
+      </button>
+      <button onClick={onToggleHeatmap} style={btnStyle("#ffb84d", false)}>
+        {showHeatmap ? "Hide Heatmap" : "Show Heatmap"}
+      </button>
+    </div>
+  );
+}
+
+function SessionStats({ sampleCount, heatmapCount, aoiCounts, sessionId }) {
+  const sortedAOIs = Object.entries(aoiCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 84,
+        right: 14,
+        zIndex: 40,
+        width: 320,
+        borderRadius: 16,
+        border: "1px solid rgba(200,164,77,0.28)",
+        background: "rgba(6,23,43,0.92)",
+        boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+        backdropFilter: "blur(10px)",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          padding: "12px 14px",
+          borderBottom: "1px solid rgba(200,164,77,0.2)",
+          background:
+            "linear-gradient(90deg, rgba(200,164,77,0.12), rgba(200,164,77,0.04))",
+          fontFamily: "Orbitron, monospace",
+          fontSize: 11,
+          letterSpacing: 2,
+          color: "#f2e3b0",
+        }}
+      >
+        Crew Attention Summary
+      </div>
+
+      <div style={{ padding: 14, display: "grid", gap: 10 }}>
+        <StatRow label="Session ID" value={sessionId} color="#7fd6ff" mono small />
+        <StatRow label="Buffered Samples" value={String(sampleCount)} color="#7cffb2" mono />
+        <StatRow label="Heatmap Cells" value={String(heatmapCount)} color="#ffb84d" mono />
+
+        <div
+          style={{
+            borderTop: "1px solid rgba(255,255,255,0.08)",
+            paddingTop: 10,
+          }}
+        >
+          <div
+            style={{
+              marginBottom: 8,
+              color: "rgba(238,244,251,0.55)",
+              fontSize: 11,
+              letterSpacing: 1.6,
+              textTransform: "uppercase",
+            }}
+          >
+            Top Focus Zones
+          </div>
+
+          <div style={{ display: "grid", gap: 7 }}>
+            {sortedAOIs.length ? (
+              sortedAOIs.map(([name, count]) => (
+                <div
+                  key={name}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    background: "rgba(255,255,255,0.03)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                  }}
+                >
+                  <span style={{ color: "#eef4fb", fontSize: 13 }}>{name}</span>
+                  <span
+                    style={{
+                      color: "#7fd6ff",
+                      fontFamily: "Orbitron, monospace",
+                      fontSize: 12,
+                    }}
+                  >
+                    {count}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div style={{ color: "rgba(238,244,251,0.45)", fontSize: 13 }}>
+                No AOI data yet.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatRow({ label, value, color, mono = false, small = false }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        gap: 12,
+        padding: "8px 10px",
+        borderRadius: 10,
+        background: "rgba(255,255,255,0.03)",
+        border: "1px solid rgba(255,255,255,0.06)",
+      }}
+    >
+      <span
+        style={{
+          color: "rgba(238,244,251,0.52)",
+          fontSize: 11,
+          letterSpacing: 1.5,
+          textTransform: "uppercase",
+        }}
+      >
+        {label}
+      </span>
+      <span
+        style={{
+          color,
+          fontFamily: mono ? "Orbitron, monospace" : "Rajdhani, sans-serif",
+          fontSize: small ? 10 : 12,
+          textAlign: "right",
+          maxWidth: 170,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function btnStyle(color, disabled) {
+  return {
+    padding: "10px 14px",
+    borderRadius: 999,
+    border: `1px solid ${disabled ? "rgba(255,255,255,0.14)" : color}`,
+    background: disabled ? "rgba(255,255,255,0.04)" : "rgba(6,23,43,0.9)",
+    color: disabled ? "rgba(255,255,255,0.35)" : color,
+    cursor: disabled ? "not-allowed" : "pointer",
+    fontFamily: "Orbitron, monospace",
+    fontSize: 10,
+    letterSpacing: 1.5,
+    boxShadow: disabled ? "none" : `0 0 0 1px ${color}10 inset`,
+  };
+}
+
 export default function FlightSimulatorTracked() {
   const rootRef = useRef(null);
 
   const [bounds, setBounds] = useState(null);
-  const [isReady, setIsReady] = useState(false);
-  const [isCalibrated, setIsCalibrated] = useState(false);
   const [isTracking, setIsTracking] = useState(false);
-
+  const [isCalibrated, setIsCalibrated] = useState(false);
   const [showAOIOverlay, setShowAOIOverlay] = useState(true);
   const [showHeatmap, setShowHeatmap] = useState(true);
 
@@ -43,9 +413,14 @@ export default function FlightSimulatorTracked() {
   const [aoiCounts, setAoiCounts] = useState({});
 
   const sessionIdRef = useRef(`flight_${Date.now()}`);
-
   const filterXRef = useRef(new KalmanFilter());
   const filterYRef = useRef(new KalmanFilter());
+
+  const webgazer = useWebgazer();
+  const calibration = useCalibration();
+  const gaze = useGazeTracking();
+
+  const isReady = !!webgazer;
 
   useEffect(() => {
     const measure = () => {
@@ -61,23 +436,7 @@ export default function FlightSimulatorTracked() {
 
     measure();
     window.addEventListener("resize", measure);
-
-    let mounted = true;
-
-    WebGazerSingleton.init()
-      .then(() => {
-        if (mounted) setIsReady(true);
-      })
-      .catch((err) => {
-        console.error(err);
-        alert("WebGazer failed to initialize. Check that webgazer.js is loaded.");
-      });
-
-    return () => {
-      mounted = false;
-      window.removeEventListener("resize", measure);
-      WebGazerSingleton.pause();
-    };
+    return () => window.removeEventListener("resize", measure);
   }, []);
 
   const resolvedAOIs = useMemo(() => {
@@ -86,81 +445,77 @@ export default function FlightSimulatorTracked() {
   }, [bounds]);
 
   useEffect(() => {
-    if (!isTracking || !bounds) return;
+    if (!isTracking || !bounds || gaze == null) return;
 
-    const onGaze = (point) => {
-      if (!rootRef.current) return;
+    const gazeX = gaze.x ?? gaze.screenX ?? gaze.clientX;
+    const gazeY = gaze.y ?? gaze.screenY ?? gaze.clientY;
 
-      const rect = rootRef.current.getBoundingClientRect();
-      const local = viewportToLocal(point.x, point.y, rect);
+    if (typeof gazeX !== "number" || typeof gazeY !== "number") return;
 
-      if (!isInsideRect(local.x, local.y, rect)) return;
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (!rect) return;
 
-      const smoothX = filterXRef.current.filter(local.x);
-      const smoothY = filterYRef.current.filter(local.y);
+    const local = viewportToLocal(gazeX, gazeY, rect);
+    if (!isInsideRect(local.x, local.y, rect)) return;
 
-      const clampedPoint = {
-        x: Math.max(0, Math.min(rect.width, smoothX)),
-        y: Math.max(0, Math.min(rect.height, smoothY)),
-      };
+    const smoothX = filterXRef.current.filter(local.x);
+    const smoothY = filterYRef.current.filter(local.y);
 
-      setGazePoint(clampedPoint);
-
-      const aoiId = mapPointToAOI(clampedPoint.x, clampedPoint.y, resolvedAOIs);
-      setCurrentAOI(aoiId);
-      setAoiCounts((prev) => ({
-        ...prev,
-        [aoiId]: (prev[aoiId] || 0) + 1,
-      }));
-
-      const { gx, gy } = pointToGridCell(
-        clampedPoint.x,
-        clampedPoint.y,
-        rect.width,
-        rect.height,
-        GRID_COLS,
-        GRID_ROWS
-      );
-
-      const key = `${gx}:${gy}`;
-      setHeatmapMap((prev) => ({
-        ...prev,
-        [key]: {
-          gx,
-          gy,
-          value: (prev[key]?.value || 0) + 1,
-        },
-      }));
-
-      const { nx, ny } = normalizePoint(clampedPoint.x, clampedPoint.y, rect);
-      const sample = {
-        sessionId: sessionIdRef.current,
-        ts: Date.now(),
-        x: Number(clampedPoint.x.toFixed(2)),
-        y: Number(clampedPoint.y.toFixed(2)),
-        nx: Number(nx.toFixed(4)),
-        ny: Number(ny.toFixed(4)),
-        aoi: aoiId,
-        confidence: point.confidence ?? 1,
-        grid: { x: gx, y: gy },
-      };
-
-      setSampleBuffer((prev) => {
-        const next = [...prev, sample];
-        if (next.length > MAX_BUFFER_SIZE) {
-          return next.slice(next.length - MAX_BUFFER_SIZE);
-        }
-        return next;
-      });
+    const clampedPoint = {
+      x: Math.max(0, Math.min(rect.width, smoothX)),
+      y: Math.max(0, Math.min(rect.height, smoothY)),
     };
 
-    WebGazerSingleton.addListener(onGaze);
-    WebGazerSingleton.resume();
+    setGazePoint(clampedPoint);
 
-    return () => {
-      WebGazerSingleton.removeListener(onGaze);
+    const aoiId = mapPointToAOI(clampedPoint.x, clampedPoint.y, resolvedAOIs);
+    setCurrentAOI(aoiId);
+
+    setAoiCounts((prev) => ({
+      ...prev,
+      [aoiId]: (prev[aoiId] || 0) + 1,
+    }));
+
+    const { gx, gy } = pointToGridCell(
+      clampedPoint.x,
+      clampedPoint.y,
+      rect.width,
+      rect.height,
+      GRID_COLS,
+      GRID_ROWS
+    );
+
+    const key = `${gx}:${gy}`;
+
+    setHeatmapMap((prev) => ({
+      ...prev,
+      [key]: {
+        gx,
+        gy,
+        value: (prev[key]?.value || 0) + 1,
+      },
+    }));
+
+    const { nx, ny } = normalizePoint(clampedPoint.x, clampedPoint.y, rect);
+
+    const sample = {
+      sessionId: sessionIdRef.current,
+      ts: Date.now(),
+      x: Number(clampedPoint.x.toFixed(2)),
+      y: Number(clampedPoint.y.toFixed(2)),
+      nx: Number(nx.toFixed(4)),
+      ny: Number(ny.toFixed(4)),
+      aoi: aoiId,
+      grid: { x: gx, y: gy },
     };
-  }, [isTracking, bounds, resolvedAOIs]);
+
+    setSampleBuffer((prev) => {
+      const next = [...prev, sample];
+      return next.length > MAX_BUFFER_SIZE
+        ? next.slice(next.length - MAX_BUFFER_SIZE)
+        : next;
+    });
+  }, [isTracking, bounds, gaze, resolvedAOIs]);
 
   useEffect(() => {
     if (!isTracking) return;
@@ -171,8 +526,8 @@ export default function FlightSimulatorTracked() {
 
         const payload = {
           sessionId: sessionIdRef.current,
-          scenarioId: "demo-flight-sim",
-          simulator: "local-react-demo",
+          scenarioId: "sia-a350-flight-analytics",
+          simulator: "oracle-flightsight-local",
           flushedAt: new Date().toISOString(),
           sampleCount: prev.length,
           samples: prev,
@@ -180,7 +535,6 @@ export default function FlightSimulatorTracked() {
 
         console.log("Generated batch payload:", payload);
         setLastBatch(payload);
-
         return [];
       });
     }, BATCH_INTERVAL_MS);
@@ -190,15 +544,24 @@ export default function FlightSimulatorTracked() {
 
   const heatmapCells = useMemo(() => Object.values(heatmapMap), [heatmapMap]);
 
-  const handleStartTracking = () => {
+  const handleStartTracking = async () => {
     filterXRef.current.reset();
     filterYRef.current.reset();
-    setIsTracking(true);
+    try {
+      await webgazer?.start?.();
+      setIsTracking(true);
+    } catch (err) {
+      console.error("Failed to start webgazer:", err);
+      alert(`Failed to start webgazer: ${err?.message || err}`);
+    }
   };
 
-  const handleStopTracking = () => {
-    setIsTracking(false);
-    WebGazerSingleton.pause();
+  const handleStopTracking = async () => {
+    try {
+      await webgazer?.stop?.();
+    } finally {
+      setIsTracking(false);
+    }
   };
 
   const handleResetSession = () => {
@@ -213,11 +576,14 @@ export default function FlightSimulatorTracked() {
     filterYRef.current.reset();
   };
 
-  const handleRecalibrate = () => {
-    WebGazerSingleton.clearData();
-    setIsCalibrated(false);
-    setIsTracking(false);
-    setGazePoint(null);
+  const handleRecalibrate = async () => {
+    try {
+      await calibration?.reset?.();
+    } finally {
+      setIsCalibrated(false);
+      setIsTracking(false);
+      setGazePoint(null);
+    }
   };
 
   return (
@@ -225,90 +591,95 @@ export default function FlightSimulatorTracked() {
       ref={rootRef}
       style={{
         position: "relative",
-        width: "100%",
         minHeight: "100vh",
+        width: "100%",
         overflow: "hidden",
-        background: "#050508",
+        background:
+          "radial-gradient(circle at top, rgba(10,33,66,0.35), transparent 35%), linear-gradient(180deg, #020913 0%, #06172b 45%, #030a12 100%)",
       }}
     >
       <FlightSimulator />
 
-      {bounds && (
-        <>
-          <HeatmapOverlay
-            cells={heatmapCells}
-            bounds={bounds}
-            cols={GRID_COLS}
-            rows={GRID_ROWS}
-            visible={showHeatmap}
-          />
-          <AOIOverlay aois={resolvedAOIs} visible={showAOIOverlay} />
-          <GazeDot point={gazePoint} />
-        </>
-      )}
+      <BrandHeader
+        isReady={isReady}
+        isCalibrated={isCalibrated}
+        isTracking={isTracking}
+        currentAOI={currentAOI}
+      />
 
-      {bounds && isReady && !isCalibrated && (
-        <CalibrationOverlay
-          bounds={bounds}
-          clicksPerPoint={5}
-          onComplete={() => {
-            setIsCalibrated(true);
-            setIsTracking(true);
-          }}
+      <SessionStats
+        sampleCount={sampleBuffer.length}
+        heatmapCount={heatmapCells.length}
+        aoiCounts={aoiCounts}
+        sessionId={sessionIdRef.current}
+      />
+
+      <ControlDock
+        isReady={isReady}
+        isCalibrated={isCalibrated}
+        isTracking={isTracking}
+        showAOIOverlay={showAOIOverlay}
+        showHeatmap={showHeatmap}
+        onStart={handleStartTracking}
+        onStop={handleStopTracking}
+        onReset={handleResetSession}
+        onRecalibrate={handleRecalibrate}
+        onToggleAOI={() => setShowAOIOverlay((v) => !v)}
+        onToggleHeatmap={() => setShowHeatmap((v) => !v)}
+      />
+
+      {bounds && showAOIOverlay && <AOIOverlay aois={resolvedAOIs} />}
+
+      {bounds && showHeatmap && (
+        <HeatmapOverlay
+          width={bounds.width}
+          height={bounds.height}
+          cols={GRID_COLS}
+          rows={GRID_ROWS}
+          cells={heatmapCells}
         />
       )}
+
+      {gazePoint && <GazeDot x={gazePoint.x} y={gazePoint.y} />}
+
+    {bounds && isReady && !isCalibrated && (
+  <CalibrationOverlay
+    bounds={bounds}
+    quickMode={true}
+    allowSkip={true}
+    title="Singapore Airlines Crew Attention Calibration"
+    subtitle="Complete gaze-point calibration before starting the A350-900 attention analytics session."
+    onRecordPoint={(x, y) => calibration?.recordPoint?.(x, y)}
+    onComplete={async () => {
+      try {
+        await calibration?.complete?.();
+      } catch (err) {
+        console.warn("Calibration complete call failed, continuing in test mode:", err);
+      } finally {
+        setIsCalibrated(true);
+      }
+    }}
+  />
+)}
 
       <div
         style={{
           position: "absolute",
-          left: 16,
-          top: 16,
-          zIndex: 70,
-          display: "flex",
-          gap: 8,
-          flexWrap: "wrap",
-          maxWidth: 520,
+          right: 14,
+          bottom: 14,
+          zIndex: 40,
+          width: 360,
+          maxWidth: "calc(100vw - 28px)",
         }}
       >
-        <button onClick={handleStartTracking} disabled={!isCalibrated || isTracking} style={btnStyle("#0a7")}>
-          Start Tracking
-        </button>
-        <button onClick={handleStopTracking} disabled={!isTracking} style={btnStyle("#a50")}>
-          Stop Tracking
-        </button>
-        <button onClick={handleResetSession} style={btnStyle("#246")}>
-          Reset Session
-        </button>
-        <button onClick={handleRecalibrate} style={btnStyle("#555")}>
-          Recalibrate
-        </button>
-        <button onClick={() => setShowAOIOverlay((v) => !v)} style={btnStyle("#334")}>
-          {showAOIOverlay ? "Hide AOIs" : "Show AOIs"}
-        </button>
-        <button onClick={() => setShowHeatmap((v) => !v)} style={btnStyle("#433")}>
-          {showHeatmap ? "Hide Heatmap" : "Show Heatmap"}
-        </button>
+        <BatchDebugPanel
+          title="Session Export Queue"
+          subtitle="Buffered client-side batch payloads for downstream Oracle ingestion."
+          currentAOI={currentAOI}
+          sampleBuffer={sampleBuffer}
+          lastBatch={lastBatch}
+        />
       </div>
-
-      <BatchDebugPanel
-        isTracking={isTracking}
-        currentAOI={currentAOI}
-        sampleBufferCount={sampleBuffer.length}
-        lastBatch={lastBatch}
-        aoiCounts={aoiCounts}
-      />
     </div>
   );
-}
-
-function btnStyle(borderColor) {
-  return {
-    padding: "10px 14px",
-    borderRadius: 10,
-    border: `1px solid ${borderColor}`,
-    background: "rgba(10,12,18,0.88)",
-    color: "#fff",
-    cursor: "pointer",
-    fontWeight: 600,
-  };
 }
