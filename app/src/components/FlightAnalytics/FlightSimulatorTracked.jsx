@@ -203,6 +203,7 @@ function ControlDock({
   onStop,
   onReset,
   onRecalibrate,
+  onBeginCalibration,
   onToggleAOI,
   onToggleHeatmap,
 }) {
@@ -226,6 +227,7 @@ function ControlDock({
       >
         Start Tracking
       </button>
+
       <button
         onClick={onStop}
         disabled={!isTracking}
@@ -233,15 +235,22 @@ function ControlDock({
       >
         Stop Tracking
       </button>
+
       <button onClick={onReset} style={btnStyle("#7fd6ff", false)}>
         Reset Session
       </button>
-      <button onClick={onRecalibrate} style={btnStyle("#c8a44d", false)}>
-        Recalibrate
+
+      <button
+        onClick={isCalibrated ? onRecalibrate : onBeginCalibration}
+        style={btnStyle("#c8a44d", false)}
+      >
+        {isCalibrated ? "Recalibrate" : "Begin Calibration"}
       </button>
+
       <button onClick={onToggleAOI} style={btnStyle("#7fd6ff", false)}>
         {showAOIOverlay ? "Hide AOIs" : "Show AOIs"}
       </button>
+
       <button onClick={onToggleHeatmap} style={btnStyle("#ffb84d", false)}>
         {showHeatmap ? "Hide Heatmap" : "Show Heatmap"}
       </button>
@@ -428,6 +437,7 @@ export default function FlightSimulatorTracked() {
   const filterYRef = useRef(new KalmanFilter());
   const lastAcceptedRef = useRef(null);
   const smoothedRef = useRef(null);
+  
   const lastSampleTsRef = useRef(0);
   const aoiStabilityRef = useRef({
     candidate: "NONE",
@@ -441,6 +451,7 @@ export default function FlightSimulatorTracked() {
   const [isCalibrated, setIsCalibrated] = useState(false);
   const [showAOIOverlay, setShowAOIOverlay] = useState(true);
   const [showHeatmap, setShowHeatmap] = useState(true);
+  const [showCalibrationOverlay, setShowCalibrationOverlay] = useState(false);
 
   const [gazePoint, setGazePoint] = useState(null);
   const [heatmapMap, setHeatmapMap] = useState({});
@@ -448,7 +459,8 @@ export default function FlightSimulatorTracked() {
   const [lastBatch, setLastBatch] = useState(null);
   const [currentAOI, setCurrentAOI] = useState("NONE");
   const [aoiCounts, setAoiCounts] = useState({});
-
+  const flushIntervalRef = useRef(null);
+  const isStoppingRef = useRef(false);
   const webgazer = useWebgazer();
   const calibration = useCalibration();
   const gaze = useGazeTracking();
@@ -683,43 +695,59 @@ export default function FlightSimulatorTracked() {
   }, [isTracking, bounds, gaze, resolvedAOIs]);
 
   useEffect(() => {
-    if (!isTracking) return;
+  if (!isTracking) {
+    if (flushIntervalRef.current) {
+      clearInterval(flushIntervalRef.current);
+      flushIntervalRef.current = null;
+    }
+    return;
+  }
 
-    const interval = setInterval(() => {
-      setSampleBuffer((prev) => {
-        if (prev.length < MIN_BATCH_SIZE) return prev;
-        if (!backendSessionIdRef.current) return prev;
+  if (flushIntervalRef.current) {
+    clearInterval(flushIntervalRef.current);
+    flushIntervalRef.current = null;
+  }
 
-        const payload = {
-          sessionId: backendSessionIdRef.current,
-          samples: prev,
-        };
+  flushIntervalRef.current = setInterval(() => {
+    setSampleBuffer((prev) => {
+      if (prev.length < MIN_BATCH_SIZE) return prev;
+      if (!backendSessionIdRef.current) return prev;
 
-        fetch("http://localhost:4000/api/gaze/batch", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+      const payload = {
+        sessionId: backendSessionIdRef.current,
+        samples: prev,
+      };
+
+      fetch("http://localhost:4000/api/gaze/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+        .then(async (r) => {
+          if (!r.ok) {
+            const text = await r.text();
+            throw new Error(`Batch POST failed: ${r.status} ${text}`);
+          }
+          return r.json();
         })
-          .then(async (r) => {
-            if (!r.ok) {
-              const text = await r.text();
-              throw new Error(`Batch POST failed: ${r.status} ${text}`);
-            }
-            return r.json();
-          })
-          .then((data) => {
-            setLastBatch(data);
-          })
-          .catch((err) => {
-            console.error("Failed to flush gaze batch:", err);
-          });
+        .then((data) => {
+          setLastBatch(data);
+        })
+        .catch((err) => {
+          console.error("Failed to flush gaze batch:", err);
+        });
 
-        return [];
-      });
-    }, BATCH_INTERVAL_MS);
+      return [];
+    });
+  }, BATCH_INTERVAL_MS);
 
-    return () => clearInterval(interval);
-  }, [isTracking]);
+  return () => {
+    if (flushIntervalRef.current) {
+      clearInterval(flushIntervalRef.current);
+      flushIntervalRef.current = null;
+    }
+  };
+}, [isTracking]);
 
   const heatmapCells = useMemo(() => Object.values(heatmapMap), [heatmapMap]);
 
@@ -760,30 +788,39 @@ export default function FlightSimulatorTracked() {
   };
 
   const handleStopTracking = async () => {
-    try {
-      if (webgazer?.pause) {
-        await webgazer.pause();
-      }
+  if (isStoppingRef.current) return;
+  isStoppingRef.current = true;
 
-      const remaining = sampleBuffer;
-      if (remaining.length) {
-        await flushSamplesNow(remaining);
-        setSampleBuffer([]);
-      }
-
-      if (backendSessionIdRef.current) {
-        await fetch(
-          `http://localhost:4000/api/sessions/${backendSessionIdRef.current}/end`,
-          { method: "POST" }
-        );
-      }
-    } catch (err) {
-      console.error("Failed to stop tracking cleanly:", err);
-    } finally {
-      setIsTracking(false);
-      backendSessionIdRef.current = null;
+  try {
+    if (flushIntervalRef.current) {
+      clearInterval(flushIntervalRef.current);
+      flushIntervalRef.current = null;
     }
-  };
+
+    if (webgazer?.pause) {
+      await webgazer.pause();
+    }
+
+    const remaining = sampleBuffer;
+    if (remaining.length) {
+      await flushSamplesNow(remaining);
+      setSampleBuffer([]);
+    }
+
+    if (backendSessionIdRef.current) {
+      await fetch(
+        `http://localhost:4000/api/sessions/${backendSessionIdRef.current}/end`,
+        { method: "POST" }
+      );
+    }
+  } catch (err) {
+    console.error("Failed to stop tracking cleanly:", err);
+  } finally {
+    setIsTracking(false);
+    backendSessionIdRef.current = null;
+    isStoppingRef.current = false;
+  }
+};
 
   const handleResetSession = () => {
     sessionIdRef.current = `flight_${Date.now()}`;
@@ -821,6 +858,7 @@ export default function FlightSimulatorTracked() {
       lastSampleTsRef.current = 0;
       ignoreUntilRef.current = Date.now() + 700;
       aoiStabilityRef.current = { candidate: "NONE", count: 0, active: "NONE" };
+      setShowCalibrationOverlay(true);
     }
   };
 
@@ -862,6 +900,7 @@ export default function FlightSimulatorTracked() {
         onStop={handleStopTracking}
         onReset={handleResetSession}
         onRecalibrate={handleRecalibrate}
+        onBeginCalibration={() => setShowCalibrationOverlay(true)}
         onToggleAOI={() => setShowAOIOverlay((v) => !v)}
         onToggleHeatmap={() => setShowHeatmap((v) => !v)}
       />
@@ -880,7 +919,7 @@ export default function FlightSimulatorTracked() {
 
       {gazePoint && <GazeDot point={gazePoint} />}
 
-      {bounds && isReady && !isCalibrated && (
+      {bounds && isReady && showCalibrationOverlay && !isCalibrated && (
         <CalibrationOverlay
           bounds={bounds}
           clicksPerPoint={5}
@@ -899,6 +938,7 @@ export default function FlightSimulatorTracked() {
                 smoothedRef.current = null;
                 lastSampleTsRef.current = 0;
                 setIsCalibrated(true);
+                setShowCalibrationOverlay(false);
               }, 800);
             }
           }}

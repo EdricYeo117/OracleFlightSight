@@ -1,5 +1,6 @@
 import oracledb from "oracledb";
 import { getConnection } from "../config/db.js";
+import logger from "../config/logger.js";
 
 function normalizeCells(cells) {
   const map = new Map();
@@ -31,7 +32,18 @@ function normalizeCells(cells) {
 
 export async function upsertHeatmapCellAggregates(sessionId, cells) {
   const normalizedCells = normalizeCells(cells);
-  if (!normalizedCells.length) return 0;
+  if (!normalizedCells.length) {
+    logger.debug({ sessionId }, "upsertHeatmapCellAggregates skipped: no cells");
+    return 0;
+  }
+
+  logger.debug(
+    {
+      sessionId,
+      cellCount: normalizedCells.length,
+    },
+    "upsertHeatmapCellAggregates start"
+  );
 
   const conn = await getConnection();
 
@@ -92,6 +104,10 @@ export async function upsertHeatmapCellAggregates(sessionId, cells) {
         affected += insertResult.rowsAffected || 0;
       } catch (err) {
         if (err?.errorNum === 1 || err?.code === "ORA-00001") {
+          logger.warn(
+            { sessionId, gridX: cell.gridX, gridY: cell.gridY },
+            "upsertHeatmapCellAggregates hit duplicate insert, retrying update"
+          );
           const retryUpdateResult = await conn.execute(updateSql, binds, { autoCommit: false });
           affected += retryUpdateResult.rowsAffected || 0;
         } else {
@@ -101,16 +117,33 @@ export async function upsertHeatmapCellAggregates(sessionId, cells) {
     }
 
     await conn.commit();
+
+    logger.info(
+      {
+        sessionId,
+        cellCount: normalizedCells.length,
+        rowsAffected: affected,
+      },
+      "upsertHeatmapCellAggregates complete"
+    );
+
     return affected;
   } catch (err) {
     await conn.rollback();
+    logger.error(
+      { err, sessionId, cellCount: normalizedCells.length },
+      "upsertHeatmapCellAggregates failed"
+    );
     throw err;
   } finally {
     await conn.close();
+    logger.debug({ sessionId }, "upsertHeatmapCellAggregates connection closed");
   }
 }
 
 export async function getHeatmapCellsBySession(sessionId) {
+  logger.debug({ sessionId }, "getHeatmapCellsBySession start");
+
   const conn = await getConnection();
   try {
     const result = await conn.execute(
@@ -131,8 +164,20 @@ export async function getHeatmapCellsBySession(sessionId) {
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
+    logger.info(
+      {
+        sessionId,
+        cellCount: result.rows?.length || 0,
+      },
+      "getHeatmapCellsBySession complete"
+    );
+
     return result.rows;
+  } catch (err) {
+    logger.error({ err, sessionId }, "getHeatmapCellsBySession failed");
+    throw err;
   } finally {
     await conn.close();
+    logger.debug({ sessionId }, "getHeatmapCellsBySession connection closed");
   }
 }

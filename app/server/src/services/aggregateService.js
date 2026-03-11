@@ -1,52 +1,66 @@
-function average(nums) {
-  if (!nums.length) return 0;
-  return nums.reduce((a, b) => a + b, 0) / nums.length;
+import logger from "../config/logger.js";
+
+function average(values) {
+  if (!values?.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-function shouldContinueFixation(currentFixation, sample) {
+function canContinueFixation(currentFixation, sample) {
   if (!currentFixation) return false;
-  if (currentFixation.aoi !== sample.aoi) return false;
 
   const timeGap = sample.tsMs - currentFixation.endTsMs;
   if (timeGap > 120) return false;
 
   const dx = sample.x - average(currentFixation.xs);
   const dy = sample.y - average(currentFixation.ys);
-  const distance = Math.sqrt(dx * dx + dy * dy);
+  const distance = Math.hypot(dx, dy);
 
   return distance <= 80;
 }
 
 export function processSampleIntoFixation(session, sample) {
-  const current = session.currentFixation;
-
-  if (!current || !shouldContinueFixation(current, sample)) {
-    const closedFixation = closeCurrentFixation(session);
-
+  if (!session.currentFixation) {
     session.currentFixation = {
-      aoi: sample.aoi,
+      sessionId: session.sessionId,
+      aoi: sample.aoi ?? "NONE",
       startTsMs: sample.tsMs,
       endTsMs: sample.tsMs,
-      sampleCount: 1,
       xs: [sample.x],
       ys: [sample.y],
-      nxs: [sample.nx],
-      nys: [sample.ny],
-      gridX: sample.gridX,
-      gridY: sample.gridY
+      nxs: [sample.nx ?? 0],
+      nys: [sample.ny ?? 0],
+      gridX: sample.gridX ?? null,
+      gridY: sample.gridY ?? null,
+      sampleCount: 1,
     };
-
-    return closedFixation;
+    return;
   }
 
-  current.endTsMs = sample.tsMs;
-  current.sampleCount += 1;
-  current.xs.push(sample.x);
-  current.ys.push(sample.y);
-  current.nxs.push(sample.nx);
-  current.nys.push(sample.ny);
+  if (canContinueFixation(session.currentFixation, sample)) {
+    session.currentFixation.endTsMs = sample.tsMs;
+    session.currentFixation.xs.push(sample.x);
+    session.currentFixation.ys.push(sample.y);
+    session.currentFixation.nxs.push(sample.nx ?? 0);
+    session.currentFixation.nys.push(sample.ny ?? 0);
+    session.currentFixation.sampleCount += 1;
+    return;
+  }
 
-  return null;
+  closeCurrentFixation(session);
+
+  session.currentFixation = {
+    sessionId: session.sessionId,
+    aoi: sample.aoi ?? "NONE",
+    startTsMs: sample.tsMs,
+    endTsMs: sample.tsMs,
+    xs: [sample.x],
+    ys: [sample.y],
+    nxs: [sample.nx ?? 0],
+    nys: [sample.ny ?? 0],
+    gridX: sample.gridX ?? null,
+    gridY: sample.gridY ?? null,
+    sampleCount: 1,
+  };
 }
 
 export function closeCurrentFixation(session) {
@@ -55,16 +69,22 @@ export function closeCurrentFixation(session) {
 
   const durationMs = fixation.endTsMs - fixation.startTsMs;
 
-  // Skip invalid / too-short fixations
   if (fixation.sampleCount < 2 || durationMs <= 0) {
+    logger.debug(
+      {
+        sessionId: session.sessionId,
+        aoi: fixation.aoi,
+        sampleCount: fixation.sampleCount,
+        startTsMs: fixation.startTsMs,
+        endTsMs: fixation.endTsMs,
+        durationMs,
+      },
+      "dropping invalid fixation"
+    );
+
     session.currentFixation = null;
     return null;
   }
-
-  const centerX = average(fixation.xs);
-  const centerY = average(fixation.ys);
-  const centerNx = average(fixation.nxs);
-  const centerNy = average(fixation.nys);
 
   const fixationRow = {
     sessionId: session.sessionId,
@@ -72,10 +92,10 @@ export function closeCurrentFixation(session) {
     startTsMs: fixation.startTsMs,
     endTsMs: fixation.endTsMs,
     durationMs,
-    centerX,
-    centerY,
-    centerNx,
-    centerNy,
+    centerX: Number(average(fixation.xs).toFixed(2)),
+    centerY: Number(average(fixation.ys).toFixed(2)),
+    centerNx: Number(average(fixation.nxs).toFixed(4)),
+    centerNy: Number(average(fixation.nys).toFixed(4)),
     gridX: fixation.gridX,
     gridY: fixation.gridY,
     sampleCount: fixation.sampleCount,
@@ -87,19 +107,25 @@ export function closeCurrentFixation(session) {
   session.totalGazeDurationMs += durationMs;
   session.fixationInsertBuffer.push(fixationRow);
 
-  updateAoiAggregate(session, fixationRow);
-  updateHeatmapAggregate(session, fixationRow);
-  evaluateRules(session, fixationRow);
+  const heatmapKey = `${fixationRow.gridX}:${fixationRow.gridY}`;
+  const existingHeatmap = session.heatmap.get(heatmapKey) || {
+    sessionId: session.sessionId,
+    gridX: fixationRow.gridX,
+    gridY: fixationRow.gridY,
+    sampleCount: 0,
+    fixationCount: 0,
+    totalDwellMs: 0,
+  };
 
-  session.currentFixation = null;
-  return fixationRow;
-}
+  existingHeatmap.sampleCount += fixation.sampleCount;
+  existingHeatmap.fixationCount += 1;
+  existingHeatmap.totalDwellMs += durationMs;
+  session.heatmap.set(heatmapKey, existingHeatmap);
 
-export function updateAoiAggregate(session, fixation) {
-  const key = fixation.aoi || "NONE";
-
-  const agg = session.aoiAggregates.get(key) || {
-    aoi: key,
+  const aoiKey = fixationRow.aoi ?? "NONE";
+  const existingAoi = session.aoiAggregates.get(aoiKey) || {
+    sessionId: session.sessionId,
+    aoi: aoiKey,
     sampleCount: 0,
     fixationCount: 0,
     totalDwellMs: 0,
@@ -107,71 +133,28 @@ export function updateAoiAggregate(session, fixation) {
     longestFixationMs: 0,
     firstLookTsMs: null,
     lastLookTsMs: null,
-    lookVerifiedCount: 0
+    lookVerifiedCount: 0,
   };
 
-  agg.fixationCount += 1;
-  agg.sampleCount += fixation.sampleCount;
-  agg.totalDwellMs += fixation.durationMs;
-  agg.longestFixationMs = Math.max(agg.longestFixationMs, fixation.durationMs);
-  agg.avgFixationMs = agg.totalDwellMs / agg.fixationCount;
-  agg.firstLookTsMs = agg.firstLookTsMs ?? fixation.startTsMs;
-  agg.lastLookTsMs = fixation.endTsMs;
+  existingAoi.sampleCount += fixation.sampleCount;
+  existingAoi.fixationCount += 1;
+  existingAoi.totalDwellMs += durationMs;
+  existingAoi.avgFixationMs =
+    existingAoi.fixationCount > 0
+      ? Number((existingAoi.totalDwellMs / existingAoi.fixationCount).toFixed(2))
+      : 0;
+  existingAoi.longestFixationMs = Math.max(existingAoi.longestFixationMs, durationMs);
+  existingAoi.firstLookTsMs =
+    existingAoi.firstLookTsMs == null
+      ? fixationRow.startTsMs
+      : Math.min(existingAoi.firstLookTsMs, fixationRow.startTsMs);
+  existingAoi.lastLookTsMs =
+    existingAoi.lastLookTsMs == null
+      ? fixationRow.endTsMs
+      : Math.max(existingAoi.lastLookTsMs, fixationRow.endTsMs);
 
-  session.aoiAggregates.set(key, agg);
-}
+  session.aoiAggregates.set(aoiKey, existingAoi);
 
-export function updateHeatmapAggregate(session, fixation) {
-  const key = `${fixation.gridX}:${fixation.gridY}`;
-
-  const cell = session.heatmap.get(key) || {
-    gridX: fixation.gridX,
-    gridY: fixation.gridY,
-    sampleCount: 0,
-    totalDwellMs: 0,
-    fixationCount: 0
-  };
-
-  cell.sampleCount += fixation.sampleCount;
-  cell.totalDwellMs += fixation.durationMs;
-  cell.fixationCount += 1;
-
-  session.heatmap.set(key, cell);
-}
-
-export function evaluateRules(session, fixation) {
-  for (const rule of session.rules) {
-    if (rule.aoi !== fixation.aoi) continue;
-
-    const passedDwell =
-      rule.minDwellMs == null || fixation.durationMs >= rule.minDwellMs;
-
-    const progress = session.ruleProgress[rule.ruleId] || {
-      actualDwellMs: 0,
-      actualFixationCount: 0,
-      passed: false,
-      firstSatisfiedTsMs: null
-    };
-
-    progress.actualDwellMs += fixation.durationMs;
-    progress.actualFixationCount += 1;
-
-    const passedFixationCount =
-      rule.minFixationCount == null ||
-      progress.actualFixationCount >= rule.minFixationCount;
-
-    if (!progress.passed && passedDwell && passedFixationCount) {
-      progress.passed = true;
-      progress.firstSatisfiedTsMs = fixation.endTsMs;
-      fixation.isVerifiedLook = 1;
-      fixation.verifyRuleId = rule.ruleId;
-
-      const agg = session.aoiAggregates.get(fixation.aoi);
-      if (agg) {
-        agg.lookVerifiedCount += 1;
-      }
-    }
-
-    session.ruleProgress[rule.ruleId] = progress;
-  }
+  session.currentFixation = null;
+  return fixationRow;
 }

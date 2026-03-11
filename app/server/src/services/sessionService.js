@@ -1,3 +1,4 @@
+import logger from "../config/logger.js";
 import { liveSessions } from "../state/liveSessionState.js";
 import { insertFlightSession } from "../db/flightSessionModel.js";
 
@@ -12,52 +13,88 @@ export async function createSession({
 }) {
   const sessionId = `fs_${Date.now()}`;
 
-  await insertFlightSession({
-    sessionId,
-    scenarioId,
-    pilotId,
-    sessionStatus: "ACTIVE",
-    screenWidth,
-    screenHeight,
-    gridCols,
-    gridRows,
-    notes,
-  });
+  logger.info(
+    {
+      sessionId,
+      scenarioId,
+      pilotId,
+      screenWidth,
+      screenHeight,
+      gridCols,
+      gridRows,
+      hasNotes: !!notes,
+    },
+    "createSession start"
+  );
 
-const session = {
-  sessionId,
-  scenarioId,
-  pilotId,
-  screenWidth,
-  screenHeight,
-  gridCols,
-  gridRows,
-  startedAt: new Date().toISOString(),
-  heatmap: new Map(),
-  aoiCounts: {},
-  bufferedSamples: [],
-  fixationInsertBuffer: [],
-  aoiAggregates: new Map(),
-  ruleProgress: {},
-  rules: [],
-  currentFixation: null,
-  totalSamples: 0,
-  totalFixations: 0,
-  totalGazeDurationMs: 0,
-  lastUpdated: Date.now(),
-};
+  try {
+    await insertFlightSession({
+      sessionId,
+      scenarioId,
+      pilotId,
+      sessionStatus: "ACTIVE",
+      screenWidth,
+      screenHeight,
+      gridCols,
+      gridRows,
+      notes,
+    });
 
-  liveSessions.set(sessionId, session);
+    const session = {
+      sessionId,
+      scenarioId,
+      pilotId,
+      screenWidth,
+      screenHeight,
+      gridCols,
+      gridRows,
+      startedAt: new Date().toISOString(),
+      heatmap: new Map(),
+      aoiCounts: {},
+      bufferedSamples: [],
+      fixationInsertBuffer: [],
+      aoiAggregates: new Map(),
+      ruleProgress: {},
+      rules: [],
+      currentFixation: null,
+      totalSamples: 0,
+      totalFixations: 0,
+      totalGazeDurationMs: 0,
+      lastUpdated: Date.now(),
+    };
 
-  return {
-    sessionId,
-    scenarioId,
-    pilotId,
-    screenWidth,
-    screenHeight,
-    gridCols,
-    gridRows,
-    startedAt: session.startedAt,
-    status: "ACTIVE",
-  };
+    liveSessions.set(sessionId, session);
+
+    logger.info(
+      {
+        sessionId,
+        liveSessionCount: liveSessions.size,
+        startedAt: session.startedAt,
+      },
+      "createSession complete"
+    );
+
+    return {
+      sessionId,
+      scenarioId,
+      pilotId,
+      screenWidth,
+      screenHeight,
+      gridCols,
+      gridRows,
+      startedAt: session.startedAt,
+      status: "ACTIVE",
+    };
+  } catch (err) {
+    logger.error(
+      {
+        err,
+        sessionId,
+        scenarioId,
+        pilotId,
+      },
+      "createSession failed"
+    );
+    throw err;
+  }
 }

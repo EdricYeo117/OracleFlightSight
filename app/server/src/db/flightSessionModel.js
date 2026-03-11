@@ -1,5 +1,6 @@
 import oracledb from "oracledb";
 import { getConnection } from "../config/db.js";
+import logger from "../config/logger.js";
 
 export async function insertFlightSession({
   sessionId,
@@ -12,9 +13,23 @@ export async function insertFlightSession({
   gridRows = 24,
   notes = null,
 }) {
+  logger.info(
+    {
+      sessionId,
+      scenarioId,
+      pilotId,
+      sessionStatus,
+      screenWidth,
+      screenHeight,
+      gridCols,
+      gridRows,
+    },
+    "insertFlightSession start"
+  );
+
   const conn = await getConnection();
   try {
-    await conn.execute(
+    const result = await conn.execute(
       `
       INSERT INTO FLIGHT_SESSION (
         SESSION_ID,
@@ -59,8 +74,17 @@ export async function insertFlightSession({
       },
       { autoCommit: true }
     );
+
+    logger.info(
+      { sessionId, rowsAffected: result.rowsAffected || 0 },
+      "insertFlightSession complete"
+    );
+  } catch (err) {
+    logger.error({ err, sessionId }, "insertFlightSession failed");
+    throw err;
   } finally {
     await conn.close();
+    logger.debug({ sessionId }, "insertFlightSession connection closed");
   }
 }
 
@@ -71,9 +95,20 @@ export async function finalizeFlightSession({
   totalGazeDurationMs,
   sessionStatus = "COMPLETED",
 }) {
+  logger.info(
+    {
+      sessionId,
+      totalSamples,
+      totalFixations,
+      totalGazeDurationMs,
+      sessionStatus,
+    },
+    "finalizeFlightSession start"
+  );
+
   const conn = await getConnection();
   try {
-    await conn.execute(
+    const result = await conn.execute(
       `
       UPDATE FLIGHT_SESSION
       SET
@@ -93,8 +128,17 @@ export async function finalizeFlightSession({
       },
       { autoCommit: true }
     );
+
+    logger.info(
+      { sessionId, rowsAffected: result.rowsAffected || 0 },
+      "finalizeFlightSession complete"
+    );
+  } catch (err) {
+    logger.error({ err, sessionId }, "finalizeFlightSession failed");
+    throw err;
   } finally {
     await conn.close();
+    logger.debug({ sessionId }, "finalizeFlightSession connection closed");
   }
 }
 
@@ -104,9 +148,19 @@ export async function updateFlightSessionTotals({
   totalFixations,
   totalGazeDurationMs,
 }) {
+  logger.debug(
+    {
+      sessionId,
+      totalSamples,
+      totalFixations,
+      totalGazeDurationMs,
+    },
+    "updateFlightSessionTotals start"
+  );
+
   const conn = await getConnection();
   try {
-    await conn.execute(
+    const result = await conn.execute(
       `
       UPDATE FLIGHT_SESSION
       SET
@@ -123,12 +177,23 @@ export async function updateFlightSessionTotals({
       },
       { autoCommit: true }
     );
+
+    logger.debug(
+      { sessionId, rowsAffected: result.rowsAffected || 0 },
+      "updateFlightSessionTotals complete"
+    );
+  } catch (err) {
+    logger.error({ err, sessionId }, "updateFlightSessionTotals failed");
+    throw err;
   } finally {
     await conn.close();
+    logger.debug({ sessionId }, "updateFlightSessionTotals connection closed");
   }
 }
 
 export async function getFlightSessionById(sessionId) {
+  logger.debug({ sessionId }, "getFlightSessionById start");
+
   const conn = await getConnection();
   try {
     const result = await conn.execute(
@@ -140,8 +205,21 @@ export async function getFlightSessionById(sessionId) {
       { sessionId },
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
+
+    logger.info(
+      {
+        sessionId,
+        found: !!result.rows?.[0],
+      },
+      "getFlightSessionById complete"
+    );
+
     return result.rows?.[0] || null;
+  } catch (err) {
+    logger.error({ err, sessionId }, "getFlightSessionById failed");
+    throw err;
   } finally {
     await conn.close();
+    logger.debug({ sessionId }, "getFlightSessionById connection closed");
   }
 }

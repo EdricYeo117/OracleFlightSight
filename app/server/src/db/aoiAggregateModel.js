@@ -1,7 +1,20 @@
 import { getConnection } from "../config/db.js";
+import logger from "../config/logger.js";
 
 export async function upsertAoiAggregates(sessionId, aggregates) {
-  if (!aggregates?.length) return 0;
+  if (!aggregates?.length) {
+    logger.debug({ sessionId }, "upsertAoiAggregates skipped: no aggregates");
+    return 0;
+  }
+
+  logger.debug(
+    {
+      sessionId,
+      aggregateCount: aggregates.length,
+      aois: aggregates.map((a) => a.aoi),
+    },
+    "upsertAoiAggregates start"
+  );
 
   const conn = await getConnection();
   try {
@@ -73,8 +86,29 @@ export async function upsertAoiAggregates(sessionId, aggregates) {
     }));
 
     const result = await conn.executeMany(sql, binds, { autoCommit: true });
+
+    logger.info(
+      {
+        sessionId,
+        aggregateCount: aggregates.length,
+        rowsAffected: result.rowsAffected || 0,
+      },
+      "upsertAoiAggregates complete"
+    );
+
     return result.rowsAffected || 0;
+  } catch (err) {
+    logger.error(
+      {
+        err,
+        sessionId,
+        aggregateCount: aggregates.length,
+      },
+      "upsertAoiAggregates failed"
+    );
+    throw err;
   } finally {
     await conn.close();
+    logger.debug({ sessionId }, "upsertAoiAggregates connection closed");
   }
 }

@@ -1,7 +1,20 @@
 import { getConnection } from "../config/db.js";
+import logger from "../config/logger.js";
 
 export async function upsertAoiRuleResults(sessionId, results) {
-  if (!results?.length) return 0;
+  if (!results?.length) {
+    logger.debug({ sessionId }, "upsertAoiRuleResults skipped: no results");
+    return 0;
+  }
+
+  logger.debug(
+    {
+      sessionId,
+      resultCount: results.length,
+      ruleIds: results.map((r) => r.ruleId),
+    },
+    "upsertAoiRuleResults start"
+  );
 
   const conn = await getConnection();
   try {
@@ -61,13 +74,31 @@ export async function upsertAoiRuleResults(sessionId, results) {
       autoCommit: true,
     });
 
+    logger.info(
+      {
+        sessionId,
+        resultCount: results.length,
+        rowsAffected: result.rowsAffected || 0,
+      },
+      "upsertAoiRuleResults complete"
+    );
+
     return result.rowsAffected || 0;
+  } catch (err) {
+    logger.error(
+      { err, sessionId, resultCount: results.length },
+      "upsertAoiRuleResults failed"
+    );
+    throw err;
   } finally {
     await conn.close();
+    logger.debug({ sessionId }, "upsertAoiRuleResults connection closed");
   }
 }
 
 export async function getAoiRuleResultsBySession(sessionId) {
+  logger.debug({ sessionId }, "getAoiRuleResultsBySession start");
+
   const conn = await getConnection();
   try {
     const result = await conn.execute(
@@ -90,8 +121,20 @@ export async function getAoiRuleResultsBySession(sessionId) {
       { outFormat: 4002 }
     );
 
+    logger.info(
+      {
+        sessionId,
+        resultCount: result.rows?.length || 0,
+      },
+      "getAoiRuleResultsBySession complete"
+    );
+
     return result.rows;
+  } catch (err) {
+    logger.error({ err, sessionId }, "getAoiRuleResultsBySession failed");
+    throw err;
   } finally {
     await conn.close();
+    logger.debug({ sessionId }, "getAoiRuleResultsBySession connection closed");
   }
 }
