@@ -4,7 +4,9 @@ export function createSession({
   scenarioId = "demo-flight-sim",
   pilotId = "local-user",
   screenWidth = 0,
-  screenHeight = 0
+  screenHeight = 0,
+  gridCols = 40,
+  gridRows = 24,
 }) {
   const sessionId = `fs_${Date.now()}`;
 
@@ -14,11 +16,14 @@ export function createSession({
     pilotId,
     screenWidth,
     screenHeight,
+    gridCols,
+    gridRows,
     startedAt: new Date().toISOString(),
     heatmap: new Map(),
     aoiCounts: {},
     bufferedSamples: [],
-    lastUpdated: Date.now()
+    totalSamples: 0,
+    lastUpdated: Date.now(),
   };
 
   liveSessions.set(sessionId, session);
@@ -29,7 +34,9 @@ export function createSession({
     pilotId,
     screenWidth,
     screenHeight,
+    gridCols,
+    gridRows,
     startedAt: session.startedAt,
-    status: "started"
+    status: "started",
   };
 }
