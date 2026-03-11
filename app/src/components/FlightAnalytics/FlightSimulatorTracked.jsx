@@ -640,7 +640,7 @@ export default function FlightSimulatorTracked() {
         />
       )}
 
-      {gazePoint && <GazeDot x={gazePoint.x} y={gazePoint.y} />}
+  {gazePoint && <GazeDot point={gazePoint} />}
 
     {bounds && isReady && !isCalibrated && (
   <CalibrationOverlay
