@@ -53,6 +53,14 @@ function formatZulu(date = new Date()) {
   return date.toUTCString().slice(17, 25);
 }
 
+function formatMsAsSeconds(ms = 0) {
+  if (!Number.isFinite(ms) || ms <= 0) {
+    return "0.00s";
+  }
+
+  return `${(ms / 1000).toFixed(2)}s`;
+}
+
 function TrackingStatusStrip({
   isReady,
   isCalibrated,
