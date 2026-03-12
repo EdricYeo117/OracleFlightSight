@@ -1,0 +1,86 @@
+.app-shell {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top, rgba(10, 33, 66, 0.34), transparent 28%),
+    linear-gradient(180deg, #020913 0%, #06172b 46%, #030a12 100%);
+}
+
+.app-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(200, 164, 77, 0.16);
+  background:
+    linear-gradient(90deg, rgba(6, 23, 43, 0.96), rgba(10, 33, 66, 0.96), rgba(6, 23, 43, 0.96));
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(10px);
+}
+
+.app-topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.app-topbar-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, #c8a44d 0%, #8b6c4c 100%);
+  color: #04101b;
+  font-family: Orbitron, monospace;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.app-topbar-title {
+  font-family: Orbitron, monospace;
+  color: #f2e3b0;
+  font-size: 13px;
+  letter-spacing: 2px;
+}
+
+.app-topbar-subtitle {
+  color: rgba(238, 244, 251, 0.58);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.app-topbar-tabs {
+  display: flex;
+  gap: 10px;
+}
+
+.app-tab {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: #cbd5e1;
+  border-radius: 999px;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-family: Orbitron, monospace;
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  transition: all 0.18s ease;
+}
+
+.app-tab:hover {
+  border-color: rgba(127, 214, 255, 0.35);
+  color: #eef4fb;
+}
+
+.app-tab.active {
+  border-color: rgba(200, 164, 77, 0.48);
+  background: rgba(200, 164, 77, 0.12);
+  color: #f2e3b0;
+  box-shadow: 0 0 0 1px rgba(200, 164, 77, 0.08) inset;
+}

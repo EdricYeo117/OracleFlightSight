@@ -1,4 +1,5 @@
 import { getConnection } from "../config/db.js";
+import oracledb from "oracledb";
 import logger from "../config/logger.js";
 
 export async function insertGazeSamples(samples) {
@@ -16,7 +17,7 @@ export async function insertGazeSamples(samples) {
       firstTsMs: samples[0]?.tsMs ?? null,
       lastTsMs: samples[samples.length - 1]?.tsMs ?? null,
     },
-    "insertGazeSamples start"
+    "insertGazeSamples start",
   );
 
   const conn = await getConnection();
@@ -76,7 +77,7 @@ export async function insertGazeSamples(samples) {
         !s.sessionId ||
         typeof s.tsMs !== "number" ||
         typeof s.x !== "number" ||
-        typeof s.y !== "number"
+        typeof s.y !== "number",
     );
 
     if (invalidSamples.length) {
@@ -86,7 +87,7 @@ export async function insertGazeSamples(samples) {
           invalidCount: invalidSamples.length,
           invalidIndexes: invalidSamples.map((s) => s.__index),
         },
-        "insertGazeSamples found malformed samples before insert"
+        "insertGazeSamples found malformed samples before insert",
       );
     }
 
@@ -102,7 +103,7 @@ export async function insertGazeSamples(samples) {
         sampleCount: samples.length,
         rowsAffected: result.rowsAffected || 0,
       },
-      "insertGazeSamples complete"
+      "insertGazeSamples complete",
     );
 
     return result.rowsAffected || 0;
@@ -139,7 +140,7 @@ export async function insertGazeSamples(samples) {
             }
           : null,
       },
-      "insertGazeSamples failed"
+      "insertGazeSamples failed",
     );
     throw err;
   } finally {
@@ -149,7 +150,7 @@ export async function insertGazeSamples(samples) {
     } catch (closeErr) {
       logger.error(
         { err: closeErr, sessionId },
-        "insertGazeSamples failed to close connection"
+        "insertGazeSamples failed to close connection",
       );
     }
   }

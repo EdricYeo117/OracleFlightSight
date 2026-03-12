@@ -1,4 +1,5 @@
 import { getConnection } from "../config/db.js";
+import oracledb from "oracledb";
 import logger from "../config/logger.js";
 
 export async function upsertAoiRuleResults(sessionId, results) {
@@ -13,7 +14,7 @@ export async function upsertAoiRuleResults(sessionId, results) {
       resultCount: results.length,
       ruleIds: results.map((r) => r.ruleId),
     },
-    "upsertAoiRuleResults start"
+    "upsertAoiRuleResults start",
   );
 
   const conn = await getConnection();
@@ -28,6 +29,7 @@ export async function upsertAoiRuleResults(sessionId, results) {
           :passed AS PASSED,
           :actualDwellMs AS ACTUAL_DWELL_MS,
           :actualFixationCount AS ACTUAL_FIXATION_COUNT,
+          :longestFixationMs AS LONGEST_FIXATION_MS,
           :firstSatisfiedTsMs AS FIRST_SATISFIED_TS_MS
         FROM dual
       ) src
@@ -37,6 +39,7 @@ export async function upsertAoiRuleResults(sessionId, results) {
         tgt.PASSED = src.PASSED,
         tgt.ACTUAL_DWELL_MS = src.ACTUAL_DWELL_MS,
         tgt.ACTUAL_FIXATION_COUNT = src.ACTUAL_FIXATION_COUNT,
+        tgt.LONGEST_FIXATION_MS = src.LONGEST_FIXATION_MS,
         tgt.FIRST_SATISFIED_TS_MS = src.FIRST_SATISFIED_TS_MS,
         tgt.EVALUATED_AT = CURRENT_TIMESTAMP
       WHEN NOT MATCHED THEN INSERT (
@@ -46,6 +49,7 @@ export async function upsertAoiRuleResults(sessionId, results) {
         PASSED,
         ACTUAL_DWELL_MS,
         ACTUAL_FIXATION_COUNT,
+        LONGEST_FIXATION_MS,
         FIRST_SATISFIED_TS_MS,
         EVALUATED_AT
       ) VALUES (
@@ -55,6 +59,7 @@ export async function upsertAoiRuleResults(sessionId, results) {
         src.PASSED,
         src.ACTUAL_DWELL_MS,
         src.ACTUAL_FIXATION_COUNT,
+        src.LONGEST_FIXATION_MS,
         src.FIRST_SATISFIED_TS_MS,
         CURRENT_TIMESTAMP
       )
@@ -67,6 +72,7 @@ export async function upsertAoiRuleResults(sessionId, results) {
       passed: r.passed ? 1 : 0,
       actualDwellMs: r.actualDwellMs ?? 0,
       actualFixationCount: r.actualFixationCount ?? 0,
+      longestFixationMs: r.longestFixationMs ?? 0,
       firstSatisfiedTsMs: r.firstSatisfiedTsMs ?? null,
     }));
 
@@ -80,14 +86,14 @@ export async function upsertAoiRuleResults(sessionId, results) {
         resultCount: results.length,
         rowsAffected: result.rowsAffected || 0,
       },
-      "upsertAoiRuleResults complete"
+      "upsertAoiRuleResults complete",
     );
 
     return result.rowsAffected || 0;
   } catch (err) {
     logger.error(
       { err, sessionId, resultCount: results.length },
-      "upsertAoiRuleResults failed"
+      "upsertAoiRuleResults failed",
     );
     throw err;
   } finally {
@@ -111,6 +117,7 @@ export async function getAoiRuleResultsBySession(sessionId) {
         PASSED,
         ACTUAL_DWELL_MS,
         ACTUAL_FIXATION_COUNT,
+        LONGEST_FIXATION_MS,
         FIRST_SATISFIED_TS_MS,
         EVALUATED_AT
       FROM AOI_RULE_RESULT
@@ -118,7 +125,7 @@ export async function getAoiRuleResultsBySession(sessionId) {
       ORDER BY RULE_ID
       `,
       { sessionId },
-      { outFormat: 4002 }
+      { outFormat: oracledb.OUT_FORMAT_OBJECT },
     );
 
     logger.info(
@@ -126,10 +133,10 @@ export async function getAoiRuleResultsBySession(sessionId) {
         sessionId,
         resultCount: result.rows?.length || 0,
       },
-      "getAoiRuleResultsBySession complete"
+      "getAoiRuleResultsBySession complete",
     );
 
-    return result.rows;
+    return result.rows || [];
   } catch (err) {
     logger.error({ err, sessionId }, "getAoiRuleResultsBySession failed");
     throw err;

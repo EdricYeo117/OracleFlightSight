@@ -1,4 +1,5 @@
 import { getConnection } from "../config/db.js";
+import oracledb from "oracledb";
 import logger from "../config/logger.js";
 
 export async function upsertAoiAggregates(sessionId, aggregates) {
@@ -13,7 +14,7 @@ export async function upsertAoiAggregates(sessionId, aggregates) {
       aggregateCount: aggregates.length,
       aois: aggregates.map((a) => a.aoi),
     },
-    "upsertAoiAggregates start"
+    "upsertAoiAggregates start",
   );
 
   const conn = await getConnection();
@@ -93,7 +94,7 @@ export async function upsertAoiAggregates(sessionId, aggregates) {
         aggregateCount: aggregates.length,
         rowsAffected: result.rowsAffected || 0,
       },
-      "upsertAoiAggregates complete"
+      "upsertAoiAggregates complete",
     );
 
     return result.rowsAffected || 0;
@@ -104,7 +105,7 @@ export async function upsertAoiAggregates(sessionId, aggregates) {
         sessionId,
         aggregateCount: aggregates.length,
       },
-      "upsertAoiAggregates failed"
+      "upsertAoiAggregates failed",
     );
     throw err;
   } finally {

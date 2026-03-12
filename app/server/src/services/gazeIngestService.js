@@ -3,13 +3,14 @@ import { liveSessions } from "../state/liveSessionState.js";
 
 import { insertGazeSamples } from "../db/gazeSampleModel.js";
 import { insertGazeFixations } from "../db/gazeFixationModel.js";
+import { insertAoiVisits } from "../db/aoiVisitModel.js";
 import { upsertHeatmapCellAggregates } from "../db/heatmapAggregateModel.js";
 import { upsertAoiAggregates } from "../db/aoiAggregateModel.js";
 import { updateFlightSessionTotals } from "../db/flightSessionModel.js";
 
 import {
   processSampleIntoFixation,
-  closeCurrentFixation,
+  closeAllAttentionState,
 } from "./aggregateService.js";
 
 export async function ingestBatch({ sessionId, samples }) {
@@ -27,7 +28,6 @@ export async function ingestBatch({ sessionId, samples }) {
     gridY: sample.gridY ?? sample.grid?.y ?? null,
   }));
 
-  logger.debug({ sessionId }, "inserting gaze samples");
   await insertGazeSamples(normalizedSamples);
 
   for (const sample of normalizedSamples) {
@@ -39,33 +39,26 @@ export async function ingestBatch({ sessionId, samples }) {
     processSampleIntoFixation(session, sample);
   }
 
-  logger.debug(
-    {
-      sessionId,
-      fixationBufferSize: session.fixationInsertBuffer.length,
-    },
-    "post-fixation processing"
-  );
-
   if (session.fixationInsertBuffer.length) {
-    logger.debug({ sessionId }, "inserting gaze fixations");
     await insertGazeFixations(session.fixationInsertBuffer);
     session.fixationInsertBuffer = [];
   }
 
-  logger.debug({ sessionId }, "upserting heatmap aggregates");
+  if (session.visitInsertBuffer.length) {
+    await insertAoiVisits(session.visitInsertBuffer);
+    session.visitInsertBuffer = [];
+  }
+
   await upsertHeatmapCellAggregates(
     sessionId,
-    Array.from(session.heatmap.values())
+    Array.from(session.heatmap.values()),
   );
 
-  logger.debug({ sessionId }, "upserting aoi aggregates");
   await upsertAoiAggregates(
     sessionId,
-    Array.from(session.aoiAggregates.values())
+    Array.from(session.aoiAggregates.values()),
   );
 
-  logger.debug({ sessionId }, "updating flight session totals");
   await updateFlightSessionTotals({
     sessionId,
     totalSamples: session.totalSamples,
@@ -80,7 +73,7 @@ export async function ingestBatch({ sessionId, samples }) {
       totalFixations: session.totalFixations,
       totalGazeDurationMs: session.totalGazeDurationMs,
     },
-    "ingestBatch complete"
+    "ingestBatch complete",
   );
 
   return {
@@ -104,27 +97,28 @@ export async function finalizeIngestionSession(sessionId) {
     throw new Error(`Session not found: ${sessionId}`);
   }
 
-  const finalFixation = closeCurrentFixation(session);
+  closeAllAttentionState(session);
 
-  if (finalFixation && session.fixationInsertBuffer.length) {
-    logger.debug({ sessionId }, "inserting final fixation buffer");
+  if (session.fixationInsertBuffer.length) {
     await insertGazeFixations(session.fixationInsertBuffer);
     session.fixationInsertBuffer = [];
   }
 
-  logger.debug({ sessionId }, "final heatmap aggregate upsert");
+  if (session.visitInsertBuffer.length) {
+    await insertAoiVisits(session.visitInsertBuffer);
+    session.visitInsertBuffer = [];
+  }
+
   await upsertHeatmapCellAggregates(
     sessionId,
-    Array.from(session.heatmap.values())
+    Array.from(session.heatmap.values()),
   );
 
-  logger.debug({ sessionId }, "final aoi aggregate upsert");
   await upsertAoiAggregates(
     sessionId,
-    Array.from(session.aoiAggregates.values())
+    Array.from(session.aoiAggregates.values()),
   );
 
-  logger.debug({ sessionId }, "final session totals update");
   await updateFlightSessionTotals({
     sessionId,
     totalSamples: session.totalSamples,
@@ -139,7 +133,7 @@ export async function finalizeIngestionSession(sessionId) {
       totalFixations: session.totalFixations,
       totalGazeDurationMs: session.totalGazeDurationMs,
     },
-    "finalizeIngestionSession complete"
+    "finalizeIngestionSession complete",
   );
 
   return {

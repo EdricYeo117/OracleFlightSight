@@ -5,6 +5,7 @@ import logger from "./config/logger.js";
 
 import sessionRoutes from "./routes/sessionRoutes.js";
 import gazeRoutes from "./routes/gazeRoutes.js";
+import analyticsRoutes from "./routes/analyticsRoutes.js";
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.get("/health", (req, res) => {
 
 app.use("/api/sessions", sessionRoutes);
 app.use("/api/gaze", gazeRoutes);
+app.use("/api/analytics", analyticsRoutes);
 
 app.use((err, req, res, next) => {
   req.log.error(
@@ -28,7 +30,7 @@ app.use((err, req, res, next) => {
       params: req.params,
       query: req.query,
     },
-    "unhandled request error"
+    "unhandled request error",
   );
 
   res.status(500).json({

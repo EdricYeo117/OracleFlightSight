@@ -9,10 +9,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@syncfusion/ej2-react-buttons": "^32.2.9",
     "@webgazer-ts/core": "^0.2.0",
     "@webgazer-ts/react": "^0.2.0",
+    "chart.js": "^4.5.1",
     "js-cookie": "^3.0.5",
     "react": "^19.2.4",
+    "react-chartjs-2": "^5.3.1",
     "react-dom": "^19.2.4"
   },
   "devDependencies": {

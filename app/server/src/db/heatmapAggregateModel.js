@@ -21,8 +21,12 @@ function normalizeCells(cells) {
     };
 
     existing.sampleCount = Number(c.sampleCount ?? existing.sampleCount ?? 0);
-    existing.totalDwellMs = Number(c.totalDwellMs ?? existing.totalDwellMs ?? 0);
-    existing.fixationCount = Number(c.fixationCount ?? existing.fixationCount ?? 0);
+    existing.totalDwellMs = Number(
+      c.totalDwellMs ?? existing.totalDwellMs ?? 0,
+    );
+    existing.fixationCount = Number(
+      c.fixationCount ?? existing.fixationCount ?? 0,
+    );
 
     map.set(key, existing);
   }
@@ -33,7 +37,10 @@ function normalizeCells(cells) {
 export async function upsertHeatmapCellAggregates(sessionId, cells) {
   const normalizedCells = normalizeCells(cells);
   if (!normalizedCells.length) {
-    logger.debug({ sessionId }, "upsertHeatmapCellAggregates skipped: no cells");
+    logger.debug(
+      { sessionId },
+      "upsertHeatmapCellAggregates skipped: no cells",
+    );
     return 0;
   }
 
@@ -42,7 +49,7 @@ export async function upsertHeatmapCellAggregates(sessionId, cells) {
       sessionId,
       cellCount: normalizedCells.length,
     },
-    "upsertHeatmapCellAggregates start"
+    "upsertHeatmapCellAggregates start",
   );
 
   const conn = await getConnection();
@@ -92,7 +99,9 @@ export async function upsertHeatmapCellAggregates(sessionId, cells) {
         fixationCount: cell.fixationCount ?? 0,
       };
 
-      const updateResult = await conn.execute(updateSql, binds, { autoCommit: false });
+      const updateResult = await conn.execute(updateSql, binds, {
+        autoCommit: false,
+      });
 
       if ((updateResult.rowsAffected || 0) > 0) {
         affected += updateResult.rowsAffected || 0;
@@ -100,15 +109,19 @@ export async function upsertHeatmapCellAggregates(sessionId, cells) {
       }
 
       try {
-        const insertResult = await conn.execute(insertSql, binds, { autoCommit: false });
+        const insertResult = await conn.execute(insertSql, binds, {
+          autoCommit: false,
+        });
         affected += insertResult.rowsAffected || 0;
       } catch (err) {
         if (err?.errorNum === 1 || err?.code === "ORA-00001") {
           logger.warn(
             { sessionId, gridX: cell.gridX, gridY: cell.gridY },
-            "upsertHeatmapCellAggregates hit duplicate insert, retrying update"
+            "upsertHeatmapCellAggregates hit duplicate insert, retrying update",
           );
-          const retryUpdateResult = await conn.execute(updateSql, binds, { autoCommit: false });
+          const retryUpdateResult = await conn.execute(updateSql, binds, {
+            autoCommit: false,
+          });
           affected += retryUpdateResult.rowsAffected || 0;
         } else {
           throw err;
@@ -124,7 +137,7 @@ export async function upsertHeatmapCellAggregates(sessionId, cells) {
         cellCount: normalizedCells.length,
         rowsAffected: affected,
       },
-      "upsertHeatmapCellAggregates complete"
+      "upsertHeatmapCellAggregates complete",
     );
 
     return affected;
@@ -132,12 +145,15 @@ export async function upsertHeatmapCellAggregates(sessionId, cells) {
     await conn.rollback();
     logger.error(
       { err, sessionId, cellCount: normalizedCells.length },
-      "upsertHeatmapCellAggregates failed"
+      "upsertHeatmapCellAggregates failed",
     );
     throw err;
   } finally {
     await conn.close();
-    logger.debug({ sessionId }, "upsertHeatmapCellAggregates connection closed");
+    logger.debug(
+      { sessionId },
+      "upsertHeatmapCellAggregates connection closed",
+    );
   }
 }
 
@@ -161,7 +177,7 @@ export async function getHeatmapCellsBySession(sessionId) {
       ORDER BY TOTAL_DWELL_MS DESC, SAMPLE_COUNT DESC
       `,
       { sessionId },
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      { outFormat: oracledb.OUT_FORMAT_OBJECT },
     );
 
     logger.info(
@@ -169,7 +185,7 @@ export async function getHeatmapCellsBySession(sessionId) {
         sessionId,
         cellCount: result.rows?.length || 0,
       },
-      "getHeatmapCellsBySession complete"
+      "getHeatmapCellsBySession complete",
     );
 
     return result.rows;

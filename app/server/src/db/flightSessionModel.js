@@ -24,7 +24,7 @@ export async function insertFlightSession({
       gridCols,
       gridRows,
     },
-    "insertFlightSession start"
+    "insertFlightSession start",
   );
 
   const conn = await getConnection();
@@ -72,12 +72,12 @@ export async function insertFlightSession({
         gridRows,
         notes,
       },
-      { autoCommit: true }
+      { autoCommit: true },
     );
 
     logger.info(
       { sessionId, rowsAffected: result.rowsAffected || 0 },
-      "insertFlightSession complete"
+      "insertFlightSession complete",
     );
   } catch (err) {
     logger.error({ err, sessionId }, "insertFlightSession failed");
@@ -103,7 +103,7 @@ export async function finalizeFlightSession({
       totalGazeDurationMs,
       sessionStatus,
     },
-    "finalizeFlightSession start"
+    "finalizeFlightSession start",
   );
 
   const conn = await getConnection();
@@ -126,12 +126,12 @@ export async function finalizeFlightSession({
         totalFixations,
         totalGazeDurationMs,
       },
-      { autoCommit: true }
+      { autoCommit: true },
     );
 
     logger.info(
       { sessionId, rowsAffected: result.rowsAffected || 0 },
-      "finalizeFlightSession complete"
+      "finalizeFlightSession complete",
     );
   } catch (err) {
     logger.error({ err, sessionId }, "finalizeFlightSession failed");
@@ -155,7 +155,7 @@ export async function updateFlightSessionTotals({
       totalFixations,
       totalGazeDurationMs,
     },
-    "updateFlightSessionTotals start"
+    "updateFlightSessionTotals start",
   );
 
   const conn = await getConnection();
@@ -175,12 +175,12 @@ export async function updateFlightSessionTotals({
         totalFixations,
         totalGazeDurationMs,
       },
-      { autoCommit: true }
+      { autoCommit: true },
     );
 
     logger.debug(
       { sessionId, rowsAffected: result.rowsAffected || 0 },
-      "updateFlightSessionTotals complete"
+      "updateFlightSessionTotals complete",
     );
   } catch (err) {
     logger.error({ err, sessionId }, "updateFlightSessionTotals failed");
@@ -203,7 +203,7 @@ export async function getFlightSessionById(sessionId) {
       WHERE SESSION_ID = :sessionId
       `,
       { sessionId },
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      { outFormat: oracledb.OUT_FORMAT_OBJECT },
     );
 
     logger.info(
@@ -211,7 +211,7 @@ export async function getFlightSessionById(sessionId) {
         sessionId,
         found: !!result.rows?.[0],
       },
-      "getFlightSessionById complete"
+      "getFlightSessionById complete",
     );
 
     return result.rows?.[0] || null;
@@ -221,5 +221,44 @@ export async function getFlightSessionById(sessionId) {
   } finally {
     await conn.close();
     logger.debug({ sessionId }, "getFlightSessionById connection closed");
+  }
+}
+
+export async function getFlightSessions() {
+  logger.debug("getFlightSessions start");
+
+  const conn = await getConnection();
+  try {
+    const result = await conn.execute(
+      `
+      SELECT
+        SESSION_ID,
+        SCENARIO_ID,
+        PILOT_ID,
+        SESSION_STATUS,
+        STARTED_AT,
+        ENDED_AT,
+        TOTAL_SAMPLES,
+        TOTAL_FIXATIONS,
+        TOTAL_GAZE_DURATION_MS
+      FROM FLIGHT_SESSION
+      ORDER BY STARTED_AT DESC
+      `,
+      {},
+      { outFormat: oracledb.OUT_FORMAT_OBJECT },
+    );
+
+    logger.info(
+      { sessionCount: result.rows?.length || 0 },
+      "getFlightSessions complete",
+    );
+
+    return result.rows || [];
+  } catch (err) {
+    logger.error({ err }, "getFlightSessions failed");
+    throw err;
+  } finally {
+    await conn.close();
+    logger.debug("getFlightSessions connection closed");
   }
 }

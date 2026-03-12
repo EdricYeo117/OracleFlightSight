@@ -35,12 +35,19 @@ const MAX_JUMP_PX = 220;
 const MIN_SAMPLE_INTERVAL_MS = 60;
 const EWMA_ALPHA = 0.22;
 const AOI_CONFIRM_SAMPLES = 3;
+const MIN_CONFIDENCE = 0.5;
+const MIN_VISIT_MS = 120;
 
 function formatZulu(date = new Date()) {
   return date.toUTCString().slice(17, 25);
 }
 
-function BrandHeader({ isReady, isCalibrated, isTracking, currentAOI }) {
+function TrackingStatusStrip({
+  isReady,
+  isCalibrated,
+  isTracking,
+  currentAOI,
+}) {
   const [zulu, setZulu] = useState(formatZulu());
 
   useEffect(() => {
@@ -68,125 +75,79 @@ function BrandHeader({ isReady, isCalibrated, isTracking, currentAOI }) {
     <div
       style={{
         position: "absolute",
-        top: 14,
-        left: 14,
-        right: 14,
+        top: 16,
+        right: 18,
         zIndex: 40,
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between",
-        gap: 12,
-        padding: "10px 14px",
-        border: "1px solid rgba(200,164,77,0.28)",
-        borderRadius: 14,
-        background:
-          "linear-gradient(90deg, rgba(6,23,43,0.94), rgba(10,33,66,0.94), rgba(6,23,43,0.94))",
-        boxShadow: "0 10px 26px rgba(0,0,0,0.28)",
+        gap: 10,
+        padding: "8px 12px",
+        border: "1px solid rgba(200,164,77,0.16)",
+        borderRadius: 16,
+        background: "rgba(6,23,43,0.58)",
+        boxShadow: "0 10px 26px rgba(0,0,0,0.18)",
         backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div
-          style={{
-            width: 34,
-            height: 34,
-            borderRadius: "50%",
-            background:
-              "linear-gradient(180deg, rgba(200,164,77,1), rgba(138,108,76,1))",
-            color: "#04101b",
-            display: "grid",
-            placeItems: "center",
-            fontFamily: "Orbitron, monospace",
-            fontWeight: 900,
-            fontSize: 11,
-            letterSpacing: 1,
-          }}
-        >
-          SIA
-        </div>
-
-        <div>
-          <div
-            style={{
-              fontFamily: "Orbitron, monospace",
-              fontSize: 13,
-              letterSpacing: 2.6,
-              color: "#f2e3b0",
-            }}
-          >
-            Singapore Airlines
-          </div>
-          <div
-            style={{
-              fontSize: 11,
-              letterSpacing: 2,
-              color: "rgba(238,244,251,0.66)",
-            }}
-          >
-            AIRBUS A350-900 · FLIGHT CREW ATTENTION ANALYTICS
-          </div>
-        </div>
+      <div
+        style={{
+          padding: "6px 10px",
+          borderRadius: 999,
+          border: `1px solid ${trackingColor}55`,
+          color: trackingColor,
+          fontFamily: "Orbitron, monospace",
+          fontSize: 10,
+          letterSpacing: 1.4,
+          background: "rgba(255,255,255,0.03)",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {trackingState}
       </div>
 
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-          justifyContent: "flex-end",
+          padding: "6px 10px",
+          borderRadius: 999,
+          border: "1px solid rgba(127,214,255,0.34)",
+          color: "#7fd6ff",
+          fontFamily: "Orbitron, monospace",
+          fontSize: 10,
+          letterSpacing: 1.6,
+          background: "rgba(255,255,255,0.03)",
+          whiteSpace: "nowrap",
+        }}
+      >
+        ACTIVE AOI · {currentAOI}
+      </div>
+
+      <div
+        style={{
+          minWidth: 84,
+          textAlign: "right",
+          paddingLeft: 4,
         }}
       >
         <div
           style={{
-            padding: "6px 10px",
-            borderRadius: 999,
-            border: `1px solid ${trackingColor}`,
-            color: trackingColor,
             fontFamily: "Orbitron, monospace",
-            fontSize: 10,
-            letterSpacing: 1.8,
-            background: "rgba(255,255,255,0.03)",
+            fontSize: 15,
+            color: "#c8a44d",
+            letterSpacing: 1.2,
+            lineHeight: 1.1,
           }}
         >
-          {trackingState}
+          {zulu}
         </div>
-
         <div
           style={{
-            padding: "6px 10px",
-            borderRadius: 999,
-            border: "1px solid rgba(127,214,255,0.34)",
-            color: "#7fd6ff",
-            fontFamily: "Orbitron, monospace",
             fontSize: 10,
-            letterSpacing: 1.8,
-            background: "rgba(255,255,255,0.03)",
+            letterSpacing: 1.6,
+            color: "rgba(238,244,251,0.5)",
           }}
         >
-          ACTIVE AOI · {currentAOI}
-        </div>
-
-        <div style={{ minWidth: 96, textAlign: "right" }}>
-          <div
-            style={{
-              fontFamily: "Orbitron, monospace",
-              fontSize: 18,
-              color: "#c8a44d",
-              letterSpacing: 2,
-            }}
-          >
-            {zulu}
-          </div>
-          <div
-            style={{
-              fontSize: 10,
-              letterSpacing: 2,
-              color: "rgba(238,244,251,0.5)",
-            }}
-          >
-            UTC · ZULU
-          </div>
+          UTC · ZULU
         </div>
       </div>
     </div>
@@ -199,6 +160,7 @@ function ControlDock({
   isTracking,
   showAOIOverlay,
   showHeatmap,
+  showDebugPanel,
   onStart,
   onStop,
   onReset,
@@ -206,6 +168,7 @@ function ControlDock({
   onBeginCalibration,
   onToggleAOI,
   onToggleHeatmap,
+  onToggleDebug,
 }) {
   return (
     <div
@@ -254,47 +217,58 @@ function ControlDock({
       <button onClick={onToggleHeatmap} style={btnStyle("#ffb84d", false)}>
         {showHeatmap ? "Hide Heatmap" : "Show Heatmap"}
       </button>
+
+      <button onClick={onToggleDebug} style={btnStyle("#c8a44d", false)}>
+        {showDebugPanel ? "Hide Debug" : "Show Debug"}
+      </button>
     </div>
   );
 }
 
-function SessionStats({ sampleCount, heatmapCount, aoiCounts, sessionId }) {
-  const sortedAOIs = Object.entries(aoiCounts)
-    .sort((a, b) => b[1] - a[1])
+function SessionStats({
+  sampleCount,
+  liveObjectStats,
+  sessionId,
+  currentAOI,
+  currentObjectDwellMs,
+}) {
+  const sortedAOIs = Object.entries(liveObjectStats)
+    .sort((a, b) => b[1].totalDwellMs - a[1].totalDwellMs)
     .slice(0, 5);
 
   return (
     <div
       style={{
         position: "absolute",
-        top: 84,
-        right: 14,
+        top: 74,
+        right: 18,
         zIndex: 40,
-        width: 320,
-        borderRadius: 16,
-        border: "1px solid rgba(200,164,77,0.28)",
-        background: "rgba(6,23,43,0.92)",
-        boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
-        backdropFilter: "blur(10px)",
+        width: 300,
+        borderRadius: 18,
+        border: "1px solid rgba(200,164,77,0.14)",
+        background: "rgba(6,23,43,0.42)",
+        boxShadow: "0 12px 28px rgba(0,0,0,0.16)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
         overflow: "hidden",
       }}
     >
       <div
         style={{
-          padding: "12px 14px",
-          borderBottom: "1px solid rgba(200,164,77,0.2)",
+          padding: "10px 14px",
+          borderBottom: "1px solid rgba(200,164,77,0.12)",
           background:
-            "linear-gradient(90deg, rgba(200,164,77,0.12), rgba(200,164,77,0.04))",
+            "linear-gradient(90deg, rgba(200,164,77,0.08), rgba(200,164,77,0.02))",
           fontFamily: "Orbitron, monospace",
           fontSize: 11,
-          letterSpacing: 2,
+          letterSpacing: 1.6,
           color: "#f2e3b0",
         }}
       >
         Crew Attention Summary
       </div>
 
-      <div style={{ padding: 14, display: "grid", gap: 10 }}>
+      <div style={{ padding: 12, display: "grid", gap: 8 }}>
         <StatRow
           label="Session ID"
           value={sessionId}
@@ -309,9 +283,19 @@ function SessionStats({ sampleCount, heatmapCount, aoiCounts, sessionId }) {
           mono
         />
         <StatRow
-          label="Heatmap Cells"
-          value={String(heatmapCount)}
+          label="Current Object"
+          value={currentAOI}
           color="#ffb84d"
+          mono
+        />
+        <StatRow
+          label="Current Dwell"
+          value={
+            currentAOI === "NONE"
+              ? "0.00s"
+              : formatMsAsSeconds(currentObjectDwellMs)
+          }
+          color="#c8a44d"
           mono
         />
 
@@ -330,39 +314,60 @@ function SessionStats({ sampleCount, heatmapCount, aoiCounts, sessionId }) {
               textTransform: "uppercase",
             }}
           >
-            Top Focus Zones
+            Top Focus Objects
           </div>
 
           <div style={{ display: "grid", gap: 7 }}>
             {sortedAOIs.length ? (
-              sortedAOIs.map(([name, count]) => (
+              sortedAOIs.map(([name, stats]) => (
                 <div
                   key={name}
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
-                    gap: 10,
+                    gap: 12,
                     padding: "8px 10px",
                     borderRadius: 10,
-                    background: "rgba(255,255,255,0.03)",
-                    border: "1px solid rgba(255,255,255,0.06)",
+                    background: "rgba(255,255,255,0.025)",
+                    border: "1px solid rgba(255,255,255,0.045)",
                   }}
                 >
-                  <span style={{ color: "#eef4fb", fontSize: 13 }}>{name}</span>
-                  <span
-                    style={{
-                      color: "#7fd6ff",
-                      fontFamily: "Orbitron, monospace",
-                      fontSize: 12,
-                    }}
-                  >
-                    {count}
-                  </span>
+                  <div>
+                    <div style={{ color: "#eef4fb", fontSize: 13 }}>{name}</div>
+                    <div
+                      style={{
+                        color: "rgba(238,244,251,0.45)",
+                        fontSize: 11,
+                      }}
+                    >
+                      {stats.visitCount} visits
+                    </div>
+                  </div>
+
+                  <div style={{ textAlign: "right" }}>
+                    <div
+                      style={{
+                        color: "#7fd6ff",
+                        fontFamily: "Orbitron, monospace",
+                        fontSize: 12,
+                      }}
+                    >
+                      {formatMsAsSeconds(stats.totalDwellMs)}
+                    </div>
+                    <div
+                      style={{
+                        color: "rgba(238,244,251,0.45)",
+                        fontSize: 11,
+                      }}
+                    >
+                      max {formatMsAsSeconds(stats.longestVisitMs)}
+                    </div>
+                  </div>
                 </div>
               ))
             ) : (
               <div style={{ color: "rgba(238,244,251,0.45)", fontSize: 13 }}>
-                No AOI data yet.
+                No object visits yet.
               </div>
             )}
           </div>
@@ -437,7 +442,7 @@ export default function FlightSimulatorTracked() {
   const filterYRef = useRef(new KalmanFilter());
   const lastAcceptedRef = useRef(null);
   const smoothedRef = useRef(null);
-  
+
   const lastSampleTsRef = useRef(0);
   const aoiStabilityRef = useRef({
     candidate: "NONE",
@@ -446,19 +451,25 @@ export default function FlightSimulatorTracked() {
   });
   const ignoreUntilRef = useRef(0);
 
+  const activeAoiSinceRef = useRef(null);
+  const lastStableAoiRef = useRef("NONE");
+
   const [bounds, setBounds] = useState(null);
   const [isTracking, setIsTracking] = useState(false);
   const [isCalibrated, setIsCalibrated] = useState(false);
   const [showAOIOverlay, setShowAOIOverlay] = useState(true);
-  const [showHeatmap, setShowHeatmap] = useState(true);
+  const [showHeatmap, setShowHeatmap] = useState(false);
   const [showCalibrationOverlay, setShowCalibrationOverlay] = useState(false);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
 
   const [gazePoint, setGazePoint] = useState(null);
   const [heatmapMap, setHeatmapMap] = useState({});
   const [sampleBuffer, setSampleBuffer] = useState([]);
   const [lastBatch, setLastBatch] = useState(null);
   const [currentAOI, setCurrentAOI] = useState("NONE");
-  const [aoiCounts, setAoiCounts] = useState({});
+  const [liveObjectStats, setLiveObjectStats] = useState({});
+  const [currentObjectDwellMs, setCurrentObjectDwellMs] = useState(0);
+
   const flushIntervalRef = useRef(null);
   const isStoppingRef = useRef(false);
   const webgazer = useWebgazer();
@@ -574,6 +585,56 @@ export default function FlightSimulatorTracked() {
     return state.active;
   }
 
+  function commitAoiVisit(aoi, startTs, endTs) {
+    if (!aoi || aoi === "NONE" || startTs == null || endTs == null) return;
+
+    const durationMs = Math.max(0, endTs - startTs);
+    if (durationMs < MIN_VISIT_MS) return;
+
+    setLiveObjectStats((prev) => {
+      const existing = prev[aoi] || {
+        visitCount: 0,
+        totalDwellMs: 0,
+        longestVisitMs: 0,
+        lastStartTsMs: null,
+        lastEndTsMs: null,
+      };
+
+      return {
+        ...prev,
+        [aoi]: {
+          ...existing,
+          visitCount: existing.visitCount + 1,
+          totalDwellMs: existing.totalDwellMs + durationMs,
+          longestVisitMs: Math.max(existing.longestVisitMs, durationMs),
+          lastStartTsMs: startTs,
+          lastEndTsMs: endTs,
+        },
+      };
+    });
+  }
+
+  function handleAoiTransition(nextAoi, now) {
+    const currentStableAoi = lastStableAoiRef.current;
+
+    if (nextAoi === currentStableAoi) {
+      if (activeAoiSinceRef.current != null && nextAoi !== "NONE") {
+        setCurrentObjectDwellMs(now - activeAoiSinceRef.current);
+      } else {
+        setCurrentObjectDwellMs(0);
+      }
+      return;
+    }
+
+    if (currentStableAoi !== "NONE" && activeAoiSinceRef.current != null) {
+      commitAoiVisit(currentStableAoi, activeAoiSinceRef.current, now);
+    }
+
+    lastStableAoiRef.current = nextAoi;
+    activeAoiSinceRef.current = nextAoi === "NONE" ? null : now;
+    setCurrentObjectDwellMs(0);
+  }
+
   useEffect(() => {
     const measure = () => {
       if (!rootRef.current) return;
@@ -613,6 +674,13 @@ export default function FlightSimulatorTracked() {
 
     if (typeof gazeX !== "number" || typeof gazeY !== "number") return;
 
+    if (
+      typeof gaze.confidence === "number" &&
+      gaze.confidence < MIN_CONFIDENCE
+    ) {
+      return;
+    }
+
     const now = Date.now();
     if (now < ignoreUntilRef.current) return;
     if (now - lastSampleTsRef.current < MIN_SAMPLE_INTERVAL_MS) return;
@@ -638,15 +706,12 @@ export default function FlightSimulatorTracked() {
     const rawAoi = mapPointToAOI(
       filteredPoint.x,
       filteredPoint.y,
-      resolvedAOIs
+      resolvedAOIs,
     );
     const aoiId = stableAOI(rawAoi);
-    setCurrentAOI(aoiId);
 
-    setAoiCounts((prev) => ({
-      ...prev,
-      [aoiId]: (prev[aoiId] || 0) + 1,
-    }));
+    setCurrentAOI(aoiId);
+    handleAoiTransition(aoiId, now);
 
     const { gx, gy } = pointToGridCell(
       filteredPoint.x,
@@ -654,7 +719,7 @@ export default function FlightSimulatorTracked() {
       rect.width,
       rect.height,
       GRID_COLS,
-      GRID_ROWS
+      GRID_ROWS,
     );
 
     const key = `${gx}:${gy}`;
@@ -695,59 +760,59 @@ export default function FlightSimulatorTracked() {
   }, [isTracking, bounds, gaze, resolvedAOIs]);
 
   useEffect(() => {
-  if (!isTracking) {
+    if (!isTracking) {
+      if (flushIntervalRef.current) {
+        clearInterval(flushIntervalRef.current);
+        flushIntervalRef.current = null;
+      }
+      return;
+    }
+
     if (flushIntervalRef.current) {
       clearInterval(flushIntervalRef.current);
       flushIntervalRef.current = null;
     }
-    return;
-  }
 
-  if (flushIntervalRef.current) {
-    clearInterval(flushIntervalRef.current);
-    flushIntervalRef.current = null;
-  }
+    flushIntervalRef.current = setInterval(() => {
+      setSampleBuffer((prev) => {
+        if (prev.length < MIN_BATCH_SIZE) return prev;
+        if (!backendSessionIdRef.current) return prev;
 
-  flushIntervalRef.current = setInterval(() => {
-    setSampleBuffer((prev) => {
-      if (prev.length < MIN_BATCH_SIZE) return prev;
-      if (!backendSessionIdRef.current) return prev;
+        const payload = {
+          sessionId: backendSessionIdRef.current,
+          samples: prev,
+        };
 
-      const payload = {
-        sessionId: backendSessionIdRef.current,
-        samples: prev,
-      };
-
-      fetch("http://localhost:4000/api/gaze/batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      })
-        .then(async (r) => {
-          if (!r.ok) {
-            const text = await r.text();
-            throw new Error(`Batch POST failed: ${r.status} ${text}`);
-          }
-          return r.json();
+        fetch("http://localhost:4000/api/gaze/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
         })
-        .then((data) => {
-          setLastBatch(data);
-        })
-        .catch((err) => {
-          console.error("Failed to flush gaze batch:", err);
-        });
+          .then(async (r) => {
+            if (!r.ok) {
+              const text = await r.text();
+              throw new Error(`Batch POST failed: ${r.status} ${text}`);
+            }
+            return r.json();
+          })
+          .then((data) => {
+            setLastBatch(data);
+          })
+          .catch((err) => {
+            console.error("Failed to flush gaze batch:", err);
+          });
 
-      return [];
-    });
-  }, BATCH_INTERVAL_MS);
+        return [];
+      });
+    }, BATCH_INTERVAL_MS);
 
-  return () => {
-    if (flushIntervalRef.current) {
-      clearInterval(flushIntervalRef.current);
-      flushIntervalRef.current = null;
-    }
-  };
-}, [isTracking]);
+    return () => {
+      if (flushIntervalRef.current) {
+        clearInterval(flushIntervalRef.current);
+        flushIntervalRef.current = null;
+      }
+    };
+  }, [isTracking]);
 
   const heatmapCells = useMemo(() => Object.values(heatmapMap), [heatmapMap]);
 
@@ -758,6 +823,9 @@ export default function FlightSimulatorTracked() {
     lastAcceptedRef.current = null;
     lastSampleTsRef.current = 0;
     aoiStabilityRef.current = { candidate: "NONE", count: 0, active: "NONE" };
+    activeAoiSinceRef.current = null;
+    lastStableAoiRef.current = "NONE";
+    setCurrentObjectDwellMs(0);
 
     try {
       if (!bounds) {
@@ -788,39 +856,54 @@ export default function FlightSimulatorTracked() {
   };
 
   const handleStopTracking = async () => {
-  if (isStoppingRef.current) return;
-  isStoppingRef.current = true;
+    if (isStoppingRef.current) return;
+    isStoppingRef.current = true;
 
-  try {
-    if (flushIntervalRef.current) {
-      clearInterval(flushIntervalRef.current);
-      flushIntervalRef.current = null;
-    }
+    try {
+      if (flushIntervalRef.current) {
+        clearInterval(flushIntervalRef.current);
+        flushIntervalRef.current = null;
+      }
 
-    if (webgazer?.pause) {
-      await webgazer.pause();
-    }
+      const now = Date.now();
+      if (
+        lastStableAoiRef.current !== "NONE" &&
+        activeAoiSinceRef.current != null
+      ) {
+        commitAoiVisit(
+          lastStableAoiRef.current,
+          activeAoiSinceRef.current,
+          now,
+        );
+      }
+      lastStableAoiRef.current = "NONE";
+      activeAoiSinceRef.current = null;
+      setCurrentObjectDwellMs(0);
 
-    const remaining = sampleBuffer;
-    if (remaining.length) {
-      await flushSamplesNow(remaining);
-      setSampleBuffer([]);
-    }
+      if (webgazer?.pause) {
+        await webgazer.pause();
+      }
 
-    if (backendSessionIdRef.current) {
-      await fetch(
-        `http://localhost:4000/api/sessions/${backendSessionIdRef.current}/end`,
-        { method: "POST" }
-      );
+      const remaining = sampleBuffer;
+      if (remaining.length) {
+        await flushSamplesNow(remaining);
+        setSampleBuffer([]);
+      }
+
+      if (backendSessionIdRef.current) {
+        await fetch(
+          `http://localhost:4000/api/sessions/${backendSessionIdRef.current}/end`,
+          { method: "POST" },
+        );
+      }
+    } catch (err) {
+      console.error("Failed to stop tracking cleanly:", err);
+    } finally {
+      setIsTracking(false);
+      backendSessionIdRef.current = null;
+      isStoppingRef.current = false;
     }
-  } catch (err) {
-    console.error("Failed to stop tracking cleanly:", err);
-  } finally {
-    setIsTracking(false);
-    backendSessionIdRef.current = null;
-    isStoppingRef.current = false;
-  }
-};
+  };
 
   const handleResetSession = () => {
     sessionIdRef.current = `flight_${Date.now()}`;
@@ -832,7 +915,8 @@ export default function FlightSimulatorTracked() {
     setLastBatch(null);
     setGazePoint(null);
     setCurrentAOI("NONE");
-    setAoiCounts({});
+    setLiveObjectStats({});
+    setCurrentObjectDwellMs(0);
 
     filterXRef.current.reset();
     filterYRef.current.reset();
@@ -840,6 +924,8 @@ export default function FlightSimulatorTracked() {
     lastAcceptedRef.current = null;
     lastSampleTsRef.current = 0;
     aoiStabilityRef.current = { candidate: "NONE", count: 0, active: "NONE" };
+    activeAoiSinceRef.current = null;
+    lastStableAoiRef.current = "NONE";
   };
 
   const handleRecalibrate = async () => {
@@ -853,11 +939,15 @@ export default function FlightSimulatorTracked() {
       setIsCalibrated(false);
       setIsTracking(false);
       setGazePoint(null);
+      setCurrentAOI("NONE");
+      setCurrentObjectDwellMs(0);
       smoothedRef.current = null;
       lastAcceptedRef.current = null;
       lastSampleTsRef.current = 0;
       ignoreUntilRef.current = Date.now() + 700;
       aoiStabilityRef.current = { candidate: "NONE", count: 0, active: "NONE" };
+      activeAoiSinceRef.current = null;
+      lastStableAoiRef.current = "NONE";
       setShowCalibrationOverlay(true);
     }
   };
@@ -876,7 +966,7 @@ export default function FlightSimulatorTracked() {
     >
       <FlightSimulator />
 
-      <BrandHeader
+      <TrackingStatusStrip
         isReady={isReady}
         isCalibrated={isCalibrated}
         isTracking={isTracking}
@@ -885,9 +975,10 @@ export default function FlightSimulatorTracked() {
 
       <SessionStats
         sampleCount={sampleBuffer.length}
-        heatmapCount={heatmapCells.length}
-        aoiCounts={aoiCounts}
+        liveObjectStats={liveObjectStats}
         sessionId={sessionIdRef.current}
+        currentAOI={currentAOI}
+        currentObjectDwellMs={currentObjectDwellMs}
       />
 
       <ControlDock
@@ -896,6 +987,7 @@ export default function FlightSimulatorTracked() {
         isTracking={isTracking}
         showAOIOverlay={showAOIOverlay}
         showHeatmap={showHeatmap}
+        showDebugPanel={showDebugPanel}
         onStart={handleStartTracking}
         onStop={handleStopTracking}
         onReset={handleResetSession}
@@ -903,6 +995,7 @@ export default function FlightSimulatorTracked() {
         onBeginCalibration={() => setShowCalibrationOverlay(true)}
         onToggleAOI={() => setShowAOIOverlay((v) => !v)}
         onToggleHeatmap={() => setShowHeatmap((v) => !v)}
+        onToggleDebug={() => setShowDebugPanel((v) => !v)}
       />
 
       {bounds && showAOIOverlay && <AOIOverlay aois={resolvedAOIs} />}
@@ -945,24 +1038,31 @@ export default function FlightSimulatorTracked() {
         />
       )}
 
-      <div
-        style={{
-          position: "absolute",
-          right: 14,
-          bottom: 14,
-          zIndex: 40,
-          width: 360,
-          maxWidth: "calc(100vw - 28px)",
-        }}
-      >
-        <BatchDebugPanel
-          isTracking={isTracking}
-          currentAOI={currentAOI}
-          sampleBufferCount={sampleBuffer.length}
-          lastBatch={lastBatch}
-          aoiCounts={aoiCounts}
-        />
-      </div>
+      {showDebugPanel && (
+        <div
+          style={{
+            position: "absolute",
+            right: 14,
+            bottom: 14,
+            zIndex: 40,
+            width: 360,
+            maxWidth: "calc(100vw - 28px)",
+          }}
+        >
+          <BatchDebugPanel
+            isTracking={isTracking}
+            currentAOI={currentAOI}
+            sampleBufferCount={sampleBuffer.length}
+            lastBatch={lastBatch}
+            aoiCounts={Object.fromEntries(
+              Object.entries(liveObjectStats).map(([key, stats]) => [
+                key,
+                stats.visitCount,
+              ]),
+            )}
+          />
+        </div>
+      )}
     </div>
   );
 }

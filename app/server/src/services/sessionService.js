@@ -24,7 +24,7 @@ export async function createSession({
       gridRows,
       hasNotes: !!notes,
     },
-    "createSession start"
+    "createSession start",
   );
 
   try {
@@ -53,10 +53,13 @@ export async function createSession({
       aoiCounts: {},
       bufferedSamples: [],
       fixationInsertBuffer: [],
+      visitInsertBuffer: [],
       aoiAggregates: new Map(),
       ruleProgress: {},
       rules: [],
       currentFixation: null,
+      currentVisit: null,
+      visitSequence: 0,
       totalSamples: 0,
       totalFixations: 0,
       totalGazeDurationMs: 0,
@@ -71,7 +74,7 @@ export async function createSession({
         liveSessionCount: liveSessions.size,
         startedAt: session.startedAt,
       },
-      "createSession complete"
+      "createSession complete",
     );
 
     return {
@@ -87,13 +90,8 @@ export async function createSession({
     };
   } catch (err) {
     logger.error(
-      {
-        err,
-        sessionId,
-        scenarioId,
-        pilotId,
-      },
-      "createSession failed"
+      { err, sessionId, scenarioId, pilotId },
+      "createSession failed",
     );
     throw err;
   }

@@ -1,6 +1,52 @@
 import { getConnection } from "../config/db.js";
+import oracledb from "oracledb";
 import logger from "../config/logger.js";
 
+export async function getGazeFixationsBySession(sessionId) {
+  logger.debug({ sessionId }, "getGazeFixationsBySession start");
+
+  const conn = await getConnection();
+  try {
+    const result = await conn.execute(
+      `
+      SELECT
+        FIXATION_ID,
+        SESSION_ID,
+        AOI,
+        START_TS_MS,
+        END_TS_MS,
+        DURATION_MS,
+        CENTER_X,
+        CENTER_Y,
+        CENTER_NX,
+        CENTER_NY,
+        GRID_X,
+        GRID_Y,
+        SAMPLE_COUNT,
+        IS_VERIFIED_LOOK,
+        VERIFY_RULE_ID
+      FROM GAZE_FIXATION
+      WHERE SESSION_ID = :sessionId
+      ORDER BY START_TS_MS
+      `,
+      { sessionId },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT },
+    );
+
+    logger.info(
+      { sessionId, fixationCount: result.rows?.length || 0 },
+      "getGazeFixationsBySession complete",
+    );
+
+    return result.rows || [];
+  } catch (err) {
+    logger.error({ err, sessionId }, "getGazeFixationsBySession failed");
+    throw err;
+  } finally {
+    await conn.close();
+    logger.debug({ sessionId }, "getGazeFixationsBySession connection closed");
+  }
+}
 export async function insertGazeFixations(fixations) {
   if (!fixations?.length) {
     logger.debug("insertGazeFixations skipped: no fixations provided");
@@ -14,7 +60,7 @@ export async function insertGazeFixations(fixations) {
       sessionId,
       fixationCount: fixations.length,
     },
-    "insertGazeFixations start"
+    "insertGazeFixations start",
   );
 
   const conn = await getConnection();
@@ -61,7 +107,7 @@ export async function insertGazeFixations(fixations) {
         Number.isFinite(f.durationMs) &&
         f.endTsMs >= f.startTsMs &&
         f.durationMs > 0 &&
-        f.sampleCount >= 2
+        f.sampleCount >= 2,
     );
 
     if (filteredFixations.length !== fixations.length) {
@@ -72,7 +118,7 @@ export async function insertGazeFixations(fixations) {
           validCount: filteredFixations.length,
           droppedCount: fixations.length - filteredFixations.length,
         },
-        "insertGazeFixations dropped invalid fixations before insert"
+        "insertGazeFixations dropped invalid fixations before insert",
       );
     }
 
@@ -94,7 +140,10 @@ export async function insertGazeFixations(fixations) {
     }));
 
     if (!binds.length) {
-      logger.debug({ sessionId }, "insertGazeFixations skipped: no valid binds");
+      logger.debug(
+        { sessionId },
+        "insertGazeFixations skipped: no valid binds",
+      );
       return 0;
     }
 
@@ -108,7 +157,7 @@ export async function insertGazeFixations(fixations) {
         fixationCount: binds.length,
         rowsAffected: result.rowsAffected || 0,
       },
-      "insertGazeFixations complete"
+      "insertGazeFixations complete",
     );
 
     return result.rowsAffected || 0;
@@ -119,7 +168,7 @@ export async function insertGazeFixations(fixations) {
         sessionId,
         fixationCount: fixations.length,
       },
-      "insertGazeFixations failed"
+      "insertGazeFixations failed",
     );
     throw err;
   } finally {
