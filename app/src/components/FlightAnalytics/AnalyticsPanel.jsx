@@ -1,3 +1,14 @@
+/**
+ * Module: app/src/components/FlightAnalytics/AnalyticsPanel.jsx
+ * Layer: Frontend
+ * Purpose:
+ * - Implements the AnalyticsPanel unit used by the OracleFlightSight application.
+ * - Encapsulates this file's logic so related features remain discoverable and maintainable.
+ * Documentation notes:
+ * - Keep this file-level description in sync when responsibilities or interfaces change.
+ * - Prefer adding JSDoc to exported functions/components and major internal helpers.
+ */
+
 import React from "react";
 
 export default function AnalyticsPanel({ stats }) {

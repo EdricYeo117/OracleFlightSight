@@ -1,3 +1,14 @@
+/**
+ * Module: app/server/src/config/db.js
+ * Layer: Backend
+ * Purpose:
+ * - Implements the db unit used by the OracleFlightSight application.
+ * - Encapsulates this file's logic so related features remain discoverable and maintainable.
+ * Documentation notes:
+ * - Keep this file-level description in sync when responsibilities or interfaces change.
+ * - Prefer adding JSDoc to exported functions/components and major internal helpers.
+ */
+
 import oracledb from "oracledb";
 import logger from "./logger.js";
 import dotenv from "dotenv";
