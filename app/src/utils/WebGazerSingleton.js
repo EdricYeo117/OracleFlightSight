@@ -2,11 +2,8 @@
  * Module: app/src/utils/WebGazerSingleton.js
  * Layer: Frontend
  * Purpose:
- * - Implements the WebGazerSingleton unit used by the OracleFlightSight application.
- * - Encapsulates this file's logic so related features remain discoverable and maintainable.
- * Documentation notes:
- * - Keep this file-level description in sync when responsibilities or interfaces change.
- * - Prefer adding JSDoc to exported functions/components and major internal helpers.
+ * - Wraps WebGazer initialization, listeners, pause/resume, and calibration recording.
+ * - Supports repeated automatic calibration samples for each target.
  */
 
 class WebGazerSingleton {
@@ -86,6 +83,25 @@ class WebGazerSingleton {
   recordCalibrationPoint(x, y) {
     if (this.webgazer?.recordScreenPosition) {
       this.webgazer.recordScreenPosition(x, y, "click");
+    }
+  }
+
+  async recordCalibrationPointBatch(
+    x,
+    y,
+    {
+      samplesPerTarget = 4,
+      sampleIntervalMs = 120,
+    } = {},
+  ) {
+    if (!this.webgazer?.recordScreenPosition) return;
+
+    for (let i = 0; i < samplesPerTarget; i += 1) {
+      this.webgazer.recordScreenPosition(x, y, "click");
+
+      if (i < samplesPerTarget - 1) {
+        await new Promise((resolve) => setTimeout(resolve, sampleIntervalMs));
+      }
     }
   }
 

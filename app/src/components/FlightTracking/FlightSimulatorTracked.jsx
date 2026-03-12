@@ -1032,29 +1032,55 @@ export default function FlightSimulatorTracked() {
       {gazePoint && <GazeDot point={gazePoint} />}
 
       {bounds && isReady && showCalibrationOverlay && !isCalibrated && (
-        <CalibrationOverlay
-          bounds={bounds}
-          clicksPerPoint={5}
-          title="Singapore Airlines Crew Attention Calibration"
-          subtitle="Keep your head still, look at each point, and click it 5 times."
-          onRecordPoint={(x, y) => calibration?.recordPoint?.(x, y)}
-          onComplete={async () => {
-            try {
-              await calibration?.complete?.();
-            } catch (err) {
-              console.warn("Calibration completion reported an issue:", err);
-            } finally {
-              ignoreUntilRef.current = Date.now() + 800;
-              setTimeout(() => {
-                lastAcceptedRef.current = null;
-                smoothedRef.current = null;
-                lastSampleTsRef.current = 0;
-                setIsCalibrated(true);
-                setShowCalibrationOverlay(false);
-              }, 800);
-            }
-          }}
-        />
+       <CalibrationOverlay
+  bounds={bounds}
+  title="Singapore Airlines Crew Attention Calibration"
+  subtitle="Keep your head still and follow each highlighted point."
+  randomCount={5}
+  settleMs={700}
+  samplesPerTarget={4}
+  sampleIntervalMs={120}
+onRecordPoint={async (x, y) => {
+  for (let i = 0; i < 4; i += 1) {
+    if (window.webgazer?.recordScreenPosition) {
+      window.webgazer.recordScreenPosition(x, y, "click");
+    }
+
+    if (calibration?.recordPoint) {
+      try {
+        await calibration.recordPoint(x, y);
+      } catch (err) {
+        console.warn("calibration.recordPoint failed:", err);
+      }
+    }
+
+    if (i < 3) {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    }
+  }
+}}
+  onComplete={async () => {
+    try {
+      await calibration?.complete?.();
+    } catch (err) {
+      console.warn("Calibration completion reported an issue:", err);
+    } finally {
+      ignoreUntilRef.current = Date.now() + 800;
+      setTimeout(() => {
+        lastAcceptedRef.current = null;
+        smoothedRef.current = null;
+        lastSampleTsRef.current = 0;
+        filterXRef.current.reset();
+        filterYRef.current.reset();
+        setGazePoint(null);
+        setCurrentAOI("NONE");
+        setCurrentObjectDwellMs(0);
+        setIsCalibrated(true);
+        setShowCalibrationOverlay(false);
+      }, 800);
+    }
+  }}
+/>
       )}
 
       {showDebugPanel && (

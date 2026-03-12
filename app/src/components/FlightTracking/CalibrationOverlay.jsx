@@ -1,74 +1,57 @@
-/**
- * Module: app/src/components/FlightAnalytics/CalibrationOverlay.jsx
- * Layer: Frontend
- * Purpose:
- * - Implements the CalibrationOverlay unit used by the OracleFlightSight application.
- * - Encapsulates this file's logic so related features remain discoverable and maintainable.
- * Documentation notes:
- * - Keep this file-level description in sync when responsibilities or interfaces change.
- * - Prefer adding JSDoc to exported functions/components and major internal helpers.
- */
-
 import React, { useMemo, useState } from "react";
-
-const POINTS = [
-  { id: "p1", xPct: 0.1, yPct: 0.1 },
-  { id: "p2", xPct: 0.5, yPct: 0.1 },
-  { id: "p3", xPct: 0.9, yPct: 0.1 },
-  { id: "p4", xPct: 0.1, yPct: 0.5 },
-  { id: "p5", xPct: 0.5, yPct: 0.5 },
-  { id: "p6", xPct: 0.9, yPct: 0.5 },
-  { id: "p7", xPct: 0.1, yPct: 0.9 },
-  { id: "p8", xPct: 0.5, yPct: 0.9 },
-  { id: "p9", xPct: 0.9, yPct: 0.9 },
-];
+import {
+  buildCalibrationSchedule,
+  getPhaseLabel,
+} from "../../utils/calibrationSchedule";
 
 export default function CalibrationOverlay({
   bounds,
-  clicksPerPoint = 5,
   title = "Eye Tracking Calibration",
-  subtitle = "Keep your head still, look directly at each point, and click it 5 times.",
+  subtitle = "Look at each dot and click it once.",
   onRecordPoint,
   onComplete,
+  randomCount = 5,
 }) {
-  const [counts, setCounts] = useState({});
+  const schedule = useMemo(() => {
+    return buildCalibrationSchedule({ randomCount });
+  }, [randomCount]);
+
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [isFinishing, setIsFinishing] = useState(false);
 
-  const completedCount = useMemo(() => {
-    return POINTS.filter((point) => (counts[point.id] || 0) >= clicksPerPoint).length;
-  }, [counts, clicksPerPoint]);
+  const currentStep = schedule[currentIndex] || null;
+  const totalSteps = schedule.length;
+  const completedCount = currentIndex;
 
-  const handleClick = async (point) => {
-    if (!bounds || isFinishing) return;
+  const handleClick = async () => {
+    if (!bounds || !currentStep || isFinishing) return;
 
-    const current = counts[point.id] || 0;
-    if (current >= clicksPerPoint) return;
-
-    const next = current + 1;
-    const nextCounts = { ...counts, [point.id]: next };
-    setCounts(nextCounts);
-
-    const x = bounds.width * point.xPct;
-    const y = bounds.height * point.yPct;
+    const x = bounds.width * currentStep.target.xPct;
+    const y = bounds.height * currentStep.target.yPct;
 
     try {
-      await onRecordPoint?.(x, y, point);
+      await onRecordPoint?.(x, y, {
+        ...currentStep.target,
+        phase: currentStep.phase,
+        pointIndex: currentStep.pointIndex,
+        scheduleIndex: currentIndex,
+        totalSteps,
+      });
+
+      const nextIndex = currentIndex + 1;
+
+      if (nextIndex >= totalSteps) {
+        setIsFinishing(true);
+        await onComplete?.({
+          totalSteps,
+          randomCount,
+        });
+        return;
+      }
+
+      setCurrentIndex(nextIndex);
     } catch (err) {
       console.error("Calibration point record failed:", err);
-      return;
-    }
-
-    const allDone =
-      POINTS.filter((p) => (nextCounts[p.id] || 0) >= clicksPerPoint).length === POINTS.length;
-
-    if (allDone) {
-      try {
-        setIsFinishing(true);
-        await onComplete?.();
-      } catch (err) {
-        console.error("Calibration completion failed:", err);
-        setIsFinishing(false);
-      }
     }
   };
 
@@ -78,7 +61,7 @@ export default function CalibrationOverlay({
         position: "absolute",
         inset: 0,
         zIndex: 50,
-        background: "rgba(0,0,0,0.78)",
+        background: "rgba(0,0,0,0.82)",
         backdropFilter: "blur(4px)",
       }}
     >
@@ -88,14 +71,14 @@ export default function CalibrationOverlay({
           top: 16,
           left: "50%",
           transform: "translateX(-50%)",
-          padding: "12px 18px",
+          padding: "14px 20px",
           borderRadius: 12,
-          background: "rgba(10,15,28,0.94)",
+          background: "rgba(10,15,28,0.95)",
           color: "#fff",
           border: "1px solid rgba(74,170,255,0.4)",
           fontFamily: "sans-serif",
           textAlign: "center",
-          minWidth: 360,
+          minWidth: 420,
         }}
       >
         <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>
@@ -107,61 +90,40 @@ export default function CalibrationOverlay({
         </div>
 
         <div style={{ fontSize: 12, opacity: 0.8, marginTop: 6 }}>
-          Sit at your normal simulator distance. Keep your face centered and avoid moving after calibration.
+          Progress: {completedCount} / {totalSteps}
         </div>
 
-        <div style={{ fontSize: 13, color: "#4af", marginTop: 8 }}>
-          Completed: {completedCount} / {POINTS.length}
-        </div>
+        {currentStep && (
+          <div style={{ fontSize: 12, opacity: 0.88, marginTop: 6 }}>
+            Phase: {getPhaseLabel(currentStep.phase)}
+          </div>
+        )}
 
         {isFinishing && (
-          <div style={{ fontSize: 12, color: "#4f4", marginTop: 6 }}>
+          <div style={{ fontSize: 12, color: "#7cffb2", marginTop: 6 }}>
             Finalizing calibration...
           </div>
         )}
       </div>
 
-      {POINTS.map((point) => {
-        const current = counts[point.id] || 0;
-        const done = current >= clicksPerPoint;
-        const progress = Math.min(current / clicksPerPoint, 1);
-
-        return (
-          <button
-            key={point.id}
-            onClick={() => handleClick(point)}
-            disabled={done || isFinishing}
-            style={{
-              position: "absolute",
-              left: `${point.xPct * 100}%`,
-              top: `${point.yPct * 100}%`,
-              transform: "translate(-50%, -50%)",
-              width: done ? 26 : 38,
-              height: done ? 26 : 38,
-              borderRadius: "50%",
-              border: done ? "2px solid #4f4" : "2px solid #ffd84d",
-              background: done
-                ? "rgba(0,255,100,0.22)"
-                : `rgba(255,216,77,${0.25 + progress * 0.45})`,
-              boxShadow: done
-                ? "0 0 18px rgba(0,255,100,0.6)"
-                : "0 0 28px rgba(255,216,77,0.9)",
-              cursor: done || isFinishing ? "default" : "pointer",
-            }}
-            title={`Calibration point ${point.id}`}
-          >
-            <span
-              style={{
-                color: "#fff",
-                fontSize: 11,
-                fontWeight: 700,
-              }}
-            >
-              {done ? "✓" : `${current}/${clicksPerPoint}`}
-            </span>
-          </button>
-        );
-      })}
+      {currentStep && !isFinishing && (
+        <button
+          onClick={handleClick}
+          style={{
+            position: "absolute",
+            left: `${currentStep.target.xPct * 100}%`,
+            top: `${currentStep.target.yPct * 100}%`,
+            transform: "translate(-50%, -50%)",
+            width: 38,
+            height: 38,
+            borderRadius: "50%",
+            border: "2px solid #ffd84d",
+            background: "rgba(255,216,77,0.32)",
+            boxShadow: "0 0 30px rgba(255,216,77,0.95)",
+            cursor: "pointer",
+          }}
+        />
+      )}
     </div>
   );
 }
