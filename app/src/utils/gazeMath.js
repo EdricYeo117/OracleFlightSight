@@ -1,3 +1,14 @@
+/**
+ * Module: app/src/utils/gazeMath.js
+ * Layer: Frontend
+ * Purpose:
+ * - Implements the gazeMath unit used by the OracleFlightSight application.
+ * - Encapsulates this file's logic so related features remain discoverable and maintainable.
+ * Documentation notes:
+ * - Keep this file-level description in sync when responsibilities or interfaces change.
+ * - Prefer adding JSDoc to exported functions/components and major internal helpers.
+ */
+
 export const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 export function viewportToLocal(gazeX, gazeY, rect) {

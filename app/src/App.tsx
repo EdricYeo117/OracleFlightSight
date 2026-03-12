@@ -2,6 +2,16 @@ import React, { useState } from "react";
 import FlightSimulatorTracked from "./components/FlightTracking/FlightSimulatorTracked.jsx";
 import FlightAnalyticsDashboard from "./components/FlightAnalytics/FlightAnalyticsDashboard.jsx";
 import "./appShell.css";
+/**
+ * Module: app/src/App.tsx
+ * Layer: Frontend
+ * Purpose:
+ * - Implements the App unit used by the OracleFlightSight application.
+ * - Encapsulates this file's logic so related features remain discoverable and maintainable.
+ * Documentation notes:
+ * - Keep this file-level description in sync when responsibilities or interfaces change.
+ * - Prefer adding JSDoc to exported functions/components and major internal helpers.
+ */
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("simulator");

@@ -1,3 +1,14 @@
+/**
+ * Module: app/server/src/db/flightSessionModel.js
+ * Layer: Backend
+ * Purpose:
+ * - Implements the flightSessionModel unit used by the OracleFlightSight application.
+ * - Encapsulates this file's logic so related features remain discoverable and maintainable.
+ * Documentation notes:
+ * - Keep this file-level description in sync when responsibilities or interfaces change.
+ * - Prefer adding JSDoc to exported functions/components and major internal helpers.
+ */
+
 import oracledb from "oracledb";
 import { getConnection } from "../config/db.js";
 import logger from "../config/logger.js";
