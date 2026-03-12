@@ -1,3 +1,14 @@
+/**
+ * Module: app/src/utils/KalmanFilter.js
+ * Layer: Frontend
+ * Purpose:
+ * - Implements the KalmanFilter unit used by the OracleFlightSight application.
+ * - Encapsulates this file's logic so related features remain discoverable and maintainable.
+ * Documentation notes:
+ * - Keep this file-level description in sync when responsibilities or interfaces change.
+ * - Prefer adding JSDoc to exported functions/components and major internal helpers.
+ */
+
 export default class KalmanFilter {
   constructor({
     R = 0.35,

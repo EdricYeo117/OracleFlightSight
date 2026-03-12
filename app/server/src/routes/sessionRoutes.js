@@ -1,3 +1,14 @@
+/**
+ * Module: app/server/src/routes/sessionRoutes.js
+ * Layer: Backend
+ * Purpose:
+ * - Implements the sessionRoutes unit used by the OracleFlightSight application.
+ * - Encapsulates this file's logic so related features remain discoverable and maintainable.
+ * Documentation notes:
+ * - Keep this file-level description in sync when responsibilities or interfaces change.
+ * - Prefer adding JSDoc to exported functions/components and major internal helpers.
+ */
+
 import express from "express";
 import { createSession } from "../services/sessionService.js";
 import { finalizeIngestionSession } from "../services/gazeIngestService.js";

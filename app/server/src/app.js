@@ -1,3 +1,14 @@
+/**
+ * Module: app/server/src/app.js
+ * Layer: Backend
+ * Purpose:
+ * - Implements the app unit used by the OracleFlightSight application.
+ * - Encapsulates this file's logic so related features remain discoverable and maintainable.
+ * Documentation notes:
+ * - Keep this file-level description in sync when responsibilities or interfaces change.
+ * - Prefer adding JSDoc to exported functions/components and major internal helpers.
+ */
+
 import express from "express";
 import cors from "cors";
 import requestLogger from "./middleware/requestLogger.js";
